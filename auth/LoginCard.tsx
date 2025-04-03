@@ -1,7 +1,8 @@
-"use client"
+
 import { View, Text, TouchableOpacity, StyleSheet, Image } from "react-native"
 import { useRouter } from "expo-router"
 import { Feather } from "@expo/vector-icons"
+
 
 export default function LoginCard() {
   const router = useRouter()
