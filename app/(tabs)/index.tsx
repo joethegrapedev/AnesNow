@@ -7,7 +7,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Touchable } from 'react-nativ
 export default function SignoutScreen() {
   const router = useRouter();
   getAuth().onAuthStateChanged((user) => {
-    if (!user) router.replace('/');
+    if (!user) router.replace('/login');
   });
 
 return(
