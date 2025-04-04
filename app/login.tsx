@@ -1,4 +1,3 @@
-
 import { useState } from "react"
 import {
   View,
@@ -22,6 +21,7 @@ export default function SignInScreen() {
   const [password, setPassword] = useState("")
   const [isSignIn, setIsSignIn] = useState(true)
   const [isLoading, setIsLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   const router = useRouter()
 
   const handleAuth = async () => {
@@ -35,11 +35,11 @@ export default function SignInScreen() {
       if (isSignIn) {
         // Sign In
         const user = await signInWithEmailAndPassword(auth, email, password)
-        if (user) router.replace("/(tabs)")
+        if (user) router.replace("/(setup)")
       } else {
         // Sign Up
         const user = await createUserWithEmailAndPassword(auth, email, password)
-        if (user) router.replace("/(tabs)")
+        if (user) router.replace("/(setup)")
       }
     } catch (error: any) {
       console.log(`Error ${isSignIn ? "signing in" : "signing up"}: `, error)
@@ -84,8 +84,18 @@ export default function SignInScreen() {
                 placeholder="Password"
                 value={password}
                 onChangeText={setPassword}
-                secureTextEntry
+                secureTextEntry={!showPassword}
               />
+              <TouchableOpacity 
+                onPress={() => setShowPassword(!showPassword)}
+                style={styles.eyeIcon}
+              >
+                <Feather 
+                  name={showPassword ? "eye" : "eye-off"} 
+                  size={20} 
+                  color="#666666" 
+                />
+              </TouchableOpacity>
             </View>
 
             {isSignIn && (
@@ -233,6 +243,10 @@ const styles = StyleSheet.create({
     color: "#666666",
     fontSize: 14,
     marginLeft: 8,
+  },
+  eyeIcon: {
+    padding: 5,
+    marginLeft: 5,
   },
 })
 
