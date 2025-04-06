@@ -22,34 +22,28 @@ export default function AnaesthetistLayout() {
             fontWeight: "500",
             marginBottom: 5,
           },
-          headerShown: false, // Hide headers for all tabs
+          headerShown: false,
         }}
       >
         <Tabs.Screen
-          name="dashboard"
+          name="Dashboard" // Case matters! Must match file name
           options={{
-            title: "Dashboard",
+            title: "Dashboard", // This is the displayed text
             tabBarIcon: ({ color }) => <Home width={22} height={22} stroke={color} />,
-            href: "/Dashboard", 
-            
           }}
         />
         <Tabs.Screen
-          name="My-jobs"
+          name="My-jobs" // Case matters! Must match file name
           options={{
-            title: "My-Jobs",
+            title: "My Jobs", // This is the displayed text (space added)
             tabBarIcon: ({ color }) => <Briefcase width={22} height={22} stroke={color} />,
-            href: "/My-jobs", // Explicitly set the route
-            
           }}
         />
         <Tabs.Screen
-          name="Profile"
+          name="Profile" // Case matters! Must match file name
           options={{
-            title: "Profile",
+            title: "Profile", // This is the displayed text
             tabBarIcon: ({ color }) => <User width={22} height={22} stroke={color} />,
-            href: "/Profile", // Explicitly set the route
-            
           }}
         />
       </Tabs>

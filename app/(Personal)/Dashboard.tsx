@@ -1,10 +1,7 @@
-"use client"
-
 import { useState, useRef } from "react"
 import { 
   View, 
   Text, 
-  ScrollView, 
   TouchableOpacity, 
   SafeAreaView, 
   Image,
@@ -13,29 +10,30 @@ import {
 } from "react-native"
 import { User, Calendar, Bell, Search } from "react-native-feather"
 import { router } from "expo-router"
-import CaseCard from "../../components/Anaesthetist/CaseCard"
+import CaseCard, { Case } from "../../components/Anaesthetist/CaseCard"
 import UserMenu from "../../components/Anaesthetist/UserMenu"
 import { mockCases } from "../../data/mockData"
 
 export default function DashboardScreen() {
-  const [cases, setCases] = useState(mockCases)
-  const [cancelledCases, setCancelledCases] = useState([])
-  const [activeTab, setActiveTab] = useState("upcoming")
-  const [isUserMenuVisible, setIsUserMenuVisible] = useState(false)
+  // Add proper typing to state
+  const [cases, setCases] = useState<Case[]>(mockCases)
+  const [cancelledCases, setCancelledCases] = useState<Case[]>([])
+  const [activeTab, setActiveTab] = useState<"upcoming" | "cancelled">("upcoming")
+  const [isUserMenuVisible, setIsUserMenuVisible] = useState<boolean>(false)
   
   // Create a ref for scroll position tracking
   const scrollY = useRef(new Animated.Value(0)).current
 
-  const handleCancelCase = (id) => {
+  const handleCancelCase = (id: string) => {
     const caseToCancel = cases.find((c) => c.id === id)
     if (caseToCancel) {
-      const updatedCase = { ...caseToCancel, isCancelled: true }
+      const updatedCase: Case = { ...caseToCancel, isCancelled: true }
       setCases(cases.filter((c) => c.id !== id))
       setCancelledCases([...cancelledCases, updatedCase])
     }
   }
 
-  const handleRequestChange = (id) => {
+  const handleRequestChange = (id: string) => {
     // In a real app, this would open a form or send a request
     alert(`Request to change timing for case ${id} sent to clinic.`)
   }
@@ -51,8 +49,8 @@ export default function DashboardScreen() {
   }
 
   // Group cases by date
-  const groupCasesByDate = (casesToGroup) => {
-    const grouped = {}
+  const groupCasesByDate = (casesToGroup: Case[]): Record<string, Case[]> => {
+    const grouped: Record<string, Case[]> = {}
 
     casesToGroup.forEach((caseItem) => {
       const date = caseItem.date
@@ -70,7 +68,12 @@ export default function DashboardScreen() {
 
   // Get today's date for the greeting
   const today = new Date()
-  const options = { weekday: "long", month: "long", day: "numeric" }
+  // Fix the DateTimeFormatOptions type
+  const options: Intl.DateTimeFormatOptions = { 
+    weekday: "long", 
+    month: "long", 
+    day: "numeric" 
+  }
   const formattedDate = today.toLocaleDateString("en-US", options)
 
   return (
@@ -164,13 +167,13 @@ export default function DashboardScreen() {
         <View style={styles.content}>
           {activeTab === "upcoming" ? (
             Object.keys(groupedCases).length > 0 ? (
-              Object.entries(groupedCases).map(([date, dateCases]) => (
+              Object.entries(groupedCases).map(([date, dateCases]: [string, Case[]]) => (
                 <View key={date} style={styles.dateGroup}>
                   <View style={styles.dateHeader}>
                     <View style={styles.dateDot} />
                     <Text style={styles.dateText}>{date}</Text>
                   </View>
-                  {dateCases.map((caseItem) => (
+                  {dateCases.map((caseItem: Case) => (
                     <CaseCard
                       key={caseItem.id}
                       caseData={caseItem}
@@ -193,13 +196,13 @@ export default function DashboardScreen() {
               </View>
             )
           ) : Object.keys(groupedCancelledCases).length > 0 ? (
-            Object.entries(groupedCancelledCases).map(([date, dateCases]) => (
+            Object.entries(groupedCancelledCases).map(([date, dateCases]: [string, Case[]]) => (
               <View key={date} style={styles.dateGroup}>
                 <View style={styles.dateHeader}>
                   <View style={styles.cancelledDateDot} />
                   <Text style={styles.dateText}>{date}</Text>
                 </View>
-                {dateCases.map((caseItem) => (
+                {dateCases.map((caseItem: Case) => (
                   <CaseCard
                     key={caseItem.id}
                     caseData={caseItem}
@@ -245,15 +248,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, // px-4
     paddingTop: 16, // pt-4
     paddingBottom: 24, // pb-6
-    
   },
   headerTopRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 16, // mb-4
-    
-    
   },
   welcomeText: {
     color: "#C7D2FE", // text-indigo-100
