@@ -35,11 +35,11 @@ export default function SignInScreen() {
       if (isSignIn) {
         // Sign In
         const user = await signInWithEmailAndPassword(auth, email, password)
-        if (user) router.replace("/(setup)")
+        if (user) router.replace("../(Personal)/Dashboard")
       } else {
         // Sign Up
         const user = await createUserWithEmailAndPassword(auth, email, password)
-        if (user) router.replace("/(setup)")
+        if (user) router.replace("../(Personal)/Dashboard")
       }
     } catch (error: any) {
       console.log(`Error ${isSignIn ? "signing in" : "signing up"}: `, error)
@@ -120,12 +120,12 @@ export default function SignInScreen() {
             </View>
           </View>
 
-          <TouchableOpacity onPress={() => router.back()}>
+          {/* <TouchableOpacity onPress={() => router.back()}>
             <View style={styles.backButton}>
               <Feather name="arrow-left" size={20} color="#666666" />
               <Text style={styles.backButtonText}>Back to role selection</Text>
             </View>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>

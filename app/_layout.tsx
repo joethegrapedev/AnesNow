@@ -14,6 +14,7 @@ export default function Layout() {
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="loading" options={{ headerShown: false }} /> {/* Add this line */}
         <Stack.Screen name="(setup)" options={{ headerShown: false }} />
+        <Stack.Screen name="(Personal)" options={{ headerShown: false }} />
         <Stack.Screen name="+not-found" />
       </Stack>
       <StatusBar style="auto" />

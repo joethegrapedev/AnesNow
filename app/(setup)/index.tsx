@@ -3,6 +3,7 @@ import {auth} from '@/FirebaseConfig'
 import { getAuth } from 'firebase/auth';
 import { useRouter } from 'expo-router';
 import { View, Text, StyleSheet, TouchableOpacity, Touchable } from 'react-native';
+import Logout from "../../components/Functions/Logout"
 
 export default function SignoutScreen() {
   const router = useRouter();
@@ -13,20 +14,16 @@ export default function SignoutScreen() {
 return(
 <View style={styles.container}> 
   
-    <TouchableOpacity
-      onPress={() => {
-        auth.signOut()
-          .then(() => {
-            console.log('User signed out');
-          })
-          .catch((error) => {
-            console.error('Error signing out:', error);
-          });
-      }}
-      style={styles.button}
-    >
-      <Text>Sign Out</Text>
-      </TouchableOpacity>
+<Logout 
+  buttonStyle={{ backgroundColor: 'black' }}
+  textStyle={{ color: 'white', fontSize: 18 }}
+  buttonText="Log Out" 
+  onSuccess={() => {
+    // Do something after logout
+    console.log('Custom logout action');
+    router.replace('/login');
+  }}
+/>
   
 </View>
 )}
