@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -10,59 +10,134 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-} from "react-native"
-import { useRouter } from "expo-router"
-import { Feather } from "@expo/vector-icons"
-import { auth } from "../FirebaseConfig"
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth"
+} from "react-native";
+import { useRouter } from "expo-router";
+import { Feather } from "@expo/vector-icons";
+import { auth, db } from "../FirebaseConfig";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function SignInScreen() {
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [isSignIn, setIsSignIn] = useState(true)
-  const [isLoading, setIsLoading] = useState(false)
-  const [showPassword, setShowPassword] = useState(false)
-  const router = useRouter()
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isSignIn, setIsSignIn] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [userRole, setUserRole] = useState<"anaesthetist" | "clinic" | null>(null);
+  const router = useRouter();
+
+  // Load the saved role from AsyncStorage when the component mounts
+  useEffect(() => {
+    const getSavedRole = async () => {
+      try {
+        const savedRole = await AsyncStorage.getItem("userRole");
+        if (savedRole === "anaesthetist" || savedRole === "clinic") {
+          setUserRole(savedRole);
+        } else {
+          // If no role is saved, redirect to role selection
+          router.replace("/Roleselection");
+        }
+      } catch (error) {
+        console.error("Error retrieving saved role:", error);
+      }
+    };
+
+    getSavedRole();
+  }, []);
 
   const handleAuth = async () => {
-    if (!email || !password) {
-      alert("Please enter both email and password")
-      return
+    if (!userRole) {
+      router.replace("/Roleselection");
+      return;
     }
 
-    setIsLoading(true)
+    if (!email || !password) {
+      alert("Please enter both email and password");
+      return;
+    }
+
+    setIsLoading(true);
     try {
+      let userCredential;
       if (isSignIn) {
         // Sign In
-        const user = await signInWithEmailAndPassword(auth, email, password)
-        if (user) router.replace("../(Personal)/Dashboard")
+        userCredential = await signInWithEmailAndPassword(auth, email, password);
       } else {
         // Sign Up
-        const user = await createUserWithEmailAndPassword(auth, email, password)
-        if (user) router.replace("../(Personal)/Dashboard")
+        userCredential = await createUserWithEmailAndPassword(auth, email, password);
+
+        // Create user document in Firestore with the selected role
+        const userDocRef = doc(db, "users", userCredential.user.uid);
+        await setDoc(userDocRef, {
+          email: userCredential.user.email,
+          role: userRole,
+          createdAt: new Date(),
+          name: "",
+          phone: "",
+          profileImage: "https://cdn-icons-png.flaticon.com/512/6522/6522516.png"
+        });
+      }
+
+      if (isSignIn) {
+        // Check if user document exists and has a role
+        const userDocRef = doc(db, "users", userCredential.user.uid);
+        const userDoc = await getDoc(userDocRef);
+        
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          // Verify that the user has the correct role
+          if (userData.role === userRole) {
+            router.replace("/(Personal)/Dashboard");
+          } else {
+            // Role mismatch - user is trying to log in with a different role
+            alert(`This account is registered as ${userData.role}. Please select the correct role.`);
+            await auth.signOut();
+            router.replace("/Roleselection");
+          }
+        } else {
+          // User exists in Auth but not in Firestore, create their document
+          await setDoc(userDocRef, {
+            email: userCredential.user.email,
+            role: userRole,
+            createdAt: new Date(),
+            name: "",
+            phone: "",
+            profileImage: "https://cdn-icons-png.flaticon.com/512/6522/6522516.png"
+          });
+          router.replace("/(Personal)/Dashboard");
+        }
+      } else {
+        // For new sign-ups, go directly to Dashboard
+        router.replace("/(Personal)/Dashboard");
       }
     } catch (error: any) {
-      console.log(`Error ${isSignIn ? "signing in" : "signing up"}: `, error)
-      alert(`${isSignIn ? "Sign in" : "Sign up"} failed: ${error.message}`)
+      console.log(`Error ${isSignIn ? "signing in" : "signing up"}: `, error);
+      alert(`${isSignIn ? "Sign in" : "Sign up"} failed: ${error.message}`);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const toggleAuthMode = () => {
-    setIsSignIn(!isSignIn)
-  }
+    setIsSignIn(!isSignIn);
+  };
 
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.keyboardAvoid}>
         <View style={styles.card}>
           <View style={styles.logoContainer}>
-            <Image source={{ uri: "/placeholder.svg?height=80&width=80" }} style={styles.logo} />
+            <Image source={{ uri: "https://cdn-icons-png.flaticon.com/512/6522/6522516.png" }} style={styles.logo} />
           </View>
 
           <Text style={styles.title}>Anaesthesia Now</Text>
-          <Text style={styles.subtitle}>{isSignIn ? "Sign in to your account" : "Create a new account"}</Text>
+          <Text style={styles.subtitle}>
+            {isSignIn ? "Sign in as " : "Create an account as "}
+            <Text style={userRole === "anaesthetist" ? styles.anaesthetistText : styles.clinicText}>
+              {userRole === "anaesthetist" ? "Anaesthetist" : "Clinic"}
+            </Text>
+          </Text>
 
           <View style={styles.formContainer}>
             <View style={styles.inputContainer}>
@@ -104,7 +179,14 @@ export default function SignInScreen() {
               </TouchableOpacity>
             )}
 
-            <TouchableOpacity style={styles.button} onPress={handleAuth} disabled={isLoading}>
+            <TouchableOpacity 
+              style={[
+                styles.button, 
+                userRole === "anaesthetist" ? styles.anaesthetistButton : styles.clinicButton
+              ]} 
+              onPress={handleAuth} 
+              disabled={isLoading}
+            >
               {isLoading ? (
                 <ActivityIndicator color="#ffffff" />
               ) : (
@@ -120,16 +202,16 @@ export default function SignInScreen() {
             </View>
           </View>
 
-          {/* <TouchableOpacity onPress={() => router.back()}>
+          <TouchableOpacity onPress={() => router.push("/Roleselection")}>
             <View style={styles.backButton}>
-              <Feather name="arrow-left" size={20} color="#666666" />
-              <Text style={styles.backButtonText}>Back to role selection</Text>
+              <Feather name="refresh-cw" size={20} color="#666666" />
+              <Text style={styles.backButtonText}>Change role</Text>
             </View>
-          </TouchableOpacity> */}
+          </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
@@ -178,6 +260,14 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 24,
   },
+  anaesthetistText: {
+    color: "#4f46e5",
+    fontWeight: "600",
+  },
+  clinicText: {
+    color: "#0891b2",
+    fontWeight: "600",
+  },
   formContainer: {
     gap: 16,
   },
@@ -207,11 +297,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   button: {
-    backgroundColor: "#4f46e5",
     borderRadius: 8,
     paddingVertical: 16,
     alignItems: "center",
     marginTop: 8,
+  },
+  anaesthetistButton: {
+    backgroundColor: "#4f46e5",
+  },
+  clinicButton: {
+    backgroundColor: "#0891b2",
   },
   buttonText: {
     color: "#ffffff",
@@ -248,5 +343,5 @@ const styles = StyleSheet.create({
     padding: 5,
     marginLeft: 5,
   },
-})
+});
 

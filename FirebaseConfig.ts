@@ -1,10 +1,11 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
+import { getAnalytics, isSupported } from "firebase/analytics";
 import { initializeAuth, getAuth, Auth } from "firebase/auth";
 import { Platform } from 'react-native';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getReactNativePersistence } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -20,8 +21,16 @@ const firebaseConfig = {
 // Initialize Firebase
 export const app = initializeApp(firebaseConfig);
 
-// Analytics only works in web environment
-export const analytics = typeof window !== 'undefined' ? getAnalytics(app) : null;
+// Initialize Firestore
+export const db = getFirestore(app);
+
+// Initialize analytics only if supported and we're on web
+export const analytics = async () => {
+  if (Platform.OS === 'web' && await isSupported()) {
+    return getAnalytics(app);
+  }
+  return null;
+};
 
 // Properly typed auth instance
 export let auth: Auth;
