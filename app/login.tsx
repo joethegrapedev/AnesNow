@@ -75,8 +75,13 @@ export default function SignInScreen() {
           createdAt: new Date(),
           name: "",
           phone: "",
-          profileImage: "https://cdn-icons-png.flaticon.com/512/6522/6522516.png"
+          profileImage: "https://cdn-icons-png.flaticon.com/512/6522/6522516.png",
+          isProfileComplete: false
         });
+        
+        // For new sign-ups, redirect to Details page to complete profile
+        router.replace("/(setup)/Details");
+        return;
       }
 
       if (isSignIn) {
@@ -88,7 +93,13 @@ export default function SignInScreen() {
           const userData = userDoc.data();
           // Verify that the user has the correct role
           if (userData.role === userRole) {
-            router.replace("/(Personal)/Dashboard");
+            // Check if profile is complete
+            if (userData.isProfileComplete === true) {
+              router.replace("/(Personal)/Dashboard");
+            } else {
+              // Profile not complete, redirect to Details page
+              router.replace("/(setup)/Details");
+            }
           } else {
             // Role mismatch - user is trying to log in with a different role
             alert(`This account is registered as ${userData.role}. Please select the correct role.`);
@@ -103,13 +114,12 @@ export default function SignInScreen() {
             createdAt: new Date(),
             name: "",
             phone: "",
-            profileImage: "https://cdn-icons-png.flaticon.com/512/6522/6522516.png"
+            profileImage: "https://cdn-icons-png.flaticon.com/512/6522/6522516.png",
+            isProfileComplete: false
           });
-          router.replace("/(Personal)/Dashboard");
+          // Redirect to Details page to complete profile
+          router.replace("/(setup)/Details");
         }
-      } else {
-        // For new sign-ups, go directly to Dashboard
-        router.replace("/(Personal)/Dashboard");
       }
     } catch (error: any) {
       console.log(`Error ${isSignIn ? "signing in" : "signing up"}: `, error);
