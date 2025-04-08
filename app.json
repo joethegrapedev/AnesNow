@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "AnesApp",
-    "slug": "AnesApp",
+    "slug": "anaesnow",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -36,6 +36,15 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "baae1b14-a793-48f2-88b3-68115033fd25"
+      }
+    },
+    "owner": "joethegrapedev"
   }
 }

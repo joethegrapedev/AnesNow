@@ -21,19 +21,8 @@ import { SafeAreaView } from "react-native-safe-area-context"
 import { auth, db } from "../../FirebaseConfig"
 import { doc, getDoc, updateDoc } from "firebase/firestore"
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage"
+import { User } from "../../types/models/User"
 
-// Define User interface to match Firestore document
-interface User {
-  name: string
-  email: string
-  phone: string
-  role: "anaesthetist" | "clinic"
-  profileImage: string
-  bio?: string
-  createdAt: Date
-  updatedAt?: Date
-  isProfileComplete: boolean
-}
 
 export default function ProfileScreen() {
   const [userData, setUserData] = useState<User | null>(null)
