@@ -25,6 +25,7 @@ export default function SignInScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [userRole, setUserRole] = useState<"anaesthetist" | "clinic" | null>(null);
+  const [staySignedIn, setStaySignedIn] = useState(true); // Default to true for better UX
   const router = useRouter();
 
   // Load the saved role from AsyncStorage when the component mounts
@@ -59,6 +60,9 @@ export default function SignInScreen() {
 
     setIsLoading(true);
     try {
+      // Remove the web-specific setPersistence call
+      // We'll handle persistence with AsyncStorage instead
+
       let userCredential;
       if (isSignIn) {
         // Sign In
@@ -78,10 +82,28 @@ export default function SignInScreen() {
           profileImage: "https://cdn-icons-png.flaticon.com/512/6522/6522516.png",
           isProfileComplete: false
         });
+
+        // Save the "stay signed in" preference
+        await AsyncStorage.setItem("staySignedIn", staySignedIn ? "true" : "false");
         
         // For new sign-ups, redirect to Details page to complete profile
         router.replace("/(setup)/Details");
         return;
+      }
+
+      // Save the "stay signed in" preference
+      await AsyncStorage.setItem("staySignedIn", staySignedIn ? "true" : "false");
+      
+      // Save the user auth data for custom persistence management
+      if (staySignedIn) {
+        // Store auth data for persistent sessions
+        await AsyncStorage.setItem("authUser", JSON.stringify({
+          uid: userCredential.user.uid,
+          email: userCredential.user.email,
+        }));
+      } else {
+        // Clear any existing persistent auth data
+        await AsyncStorage.removeItem("authUser");
       }
 
       if (isSignIn) {
@@ -181,6 +203,22 @@ export default function SignInScreen() {
                   color="#666666" 
                 />
               </TouchableOpacity>
+            </View>
+
+            <View style={styles.staySignedInContainer}>
+              <TouchableOpacity 
+                style={styles.checkbox}
+                onPress={() => setStaySignedIn(!staySignedIn)}
+              >
+                {staySignedIn ? (
+                  <View style={styles.checkedBox}>
+                    <Feather name="check" size={14} color="#ffffff" />
+                  </View>
+                ) : (
+                  <View style={styles.uncheckedBox} />
+                )}
+              </TouchableOpacity>
+              <Text style={styles.staySignedInText}>Stay signed in</Text>
             </View>
 
             {isSignIn && (
@@ -352,6 +390,33 @@ const styles = StyleSheet.create({
   eyeIcon: {
     padding: 5,
     marginLeft: 5,
+  },
+  staySignedInContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  checkbox: {
+    marginRight: 8,
+  },
+  uncheckedBox: {
+    width: 20,
+    height: 20,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 4,
+  },
+  checkedBox: {
+    width: 20,
+    height: 20,
+    backgroundColor: '#4f46e5',
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  staySignedInText: {
+    color: '#6b7280',
+    fontSize: 14,
   },
 });
 

@@ -4,8 +4,10 @@ import { getAnalytics, isSupported } from "firebase/analytics";
 import { initializeAuth, getAuth, Auth } from "firebase/auth";
 import { Platform } from 'react-native';
 import AsyncStorage from "@react-native-async-storage/async-storage";
+// Fix the import path - it's part of the main firebase/auth package in newer versions
 import { getReactNativePersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { getStorage } from "firebase/storage";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -19,28 +21,33 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-export const app = initializeApp(firebaseConfig);
+const app = initializeApp(firebaseConfig);
 
-// Initialize Firestore
-export const db = getFirestore(app);
-
-// Initialize analytics only if supported and we're on web
-export const analytics = async () => {
-  if (Platform.OS === 'web' && await isSupported()) {
-    return getAnalytics(app);
-  }
-  return null;
-};
-
-// Properly typed auth instance
-export let auth: Auth;
-
-// React Native specific setup
-if (Platform.OS !== 'web') {
+// Create platform-specific auth instance
+let auth;
+if (Platform.OS === 'web') {
+  // For web, use standard auth
+  auth = getAuth(app);
+} else {
+  // For mobile, use persistence
   auth = initializeAuth(app, {
     persistence: getReactNativePersistence(AsyncStorage)
   });
-} else {
-  // Web environment
-  auth = getAuth(app);
 }
+
+// Initialize other Firebase services
+const db = getFirestore(app);
+const storage = getStorage(app);
+
+// Initialize analytics conditionally
+let analytics = null;
+if (Platform.OS === 'web') {
+  isSupported().then(supported => {
+    if (supported) {
+      analytics = getAnalytics(app);
+    }
+  });
+}
+
+export { app, auth, db, storage, analytics };
+

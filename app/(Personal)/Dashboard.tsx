@@ -1,4 +1,4 @@
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { 
   View, 
   Text, 
@@ -6,23 +6,79 @@ import {
   SafeAreaView, 
   Image,
   StyleSheet,
-  Animated
+  Animated,
+  ActivityIndicator
 } from "react-native"
 import { User, Calendar, Bell, Search } from "react-native-feather"
 import { router } from "expo-router"
 import CaseCard, { Case } from "../../components/Anaesthetist/CaseCard"
 import UserMenu from "../../components/Anaesthetist/UserMenu"
-import { mockCases } from "../../data/mockData"
+import { auth, db } from "../../FirebaseConfig"
+import { doc, getDoc } from "firebase/firestore"
+import { fetchCases } from "../../data/caseService"
 
 export default function DashboardScreen() {
-  // Add proper typing to state
-  const [cases, setCases] = useState<Case[]>(mockCases)
+  const [cases, setCases] = useState<Case[]>([])
   const [cancelledCases, setCancelledCases] = useState<Case[]>([])
   const [activeTab, setActiveTab] = useState<"upcoming" | "cancelled">("upcoming")
   const [isUserMenuVisible, setIsUserMenuVisible] = useState<boolean>(false)
+  const [userName, setUserName] = useState<string>("")
+  const [isLoading, setIsLoading] = useState<boolean>(true)
+  const [isLoadingCases, setIsLoadingCases] = useState<boolean>(true)
   
   // Create a ref for scroll position tracking
   const scrollY = useRef(new Animated.Value(0)).current
+
+  // Fetch user data on component mount
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const user = auth.currentUser;
+        if (!user) {
+          console.error("No user is logged in");
+          setIsLoading(false);
+          return;
+        }
+
+        const userDocRef = doc(db, "users", user.uid);
+        const userDoc = await getDoc(userDocRef);
+
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          setUserName(userData.name || "User");
+        }
+      } catch (error) {
+        console.error("Error fetching user data:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchUserData();
+  }, []);
+
+  // Fetch case data for active tab
+  useEffect(() => {
+    const loadCases = async () => {
+      setIsLoadingCases(true);
+      
+      try {
+        if (activeTab === "upcoming") {
+          const upcomingCases = await fetchCases("upcoming");
+          setCases(upcomingCases);
+        } else {
+          const cancelledCasesData = await fetchCases("cancelled");
+          setCancelledCases(cancelledCasesData);
+        }
+      } catch (error) {
+        console.error(`Error loading ${activeTab} cases:`, error);
+      } finally {
+        setIsLoadingCases(false);
+      }
+    };
+    
+    loadCases();
+  }, [activeTab]);
 
   const handleCancelCase = (id: string) => {
     const caseToCancel = cases.find((c) => c.id === id)
@@ -93,7 +149,11 @@ export default function DashboardScreen() {
           <View style={styles.headerTopRow}>
             <View>
               <Text style={styles.welcomeText}>Welcome back</Text>
-              <Text style={styles.doctorName}>Dr. Alex Morgan</Text>
+              {isLoading ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <Text style={styles.doctorName}>{userName}</Text>
+              )}
             </View>
 
             <View style={styles.iconRow}>
@@ -165,7 +225,12 @@ export default function DashboardScreen() {
 
         {/* Content */}
         <View style={styles.content}>
-          {activeTab === "upcoming" ? (
+          {isLoadingCases ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#4F46E5" />
+              <Text style={styles.loadingText}>Loading cases...</Text>
+            </View>
+          ) : activeTab === "upcoming" ? (
             Object.keys(groupedCases).length > 0 ? (
               Object.entries(groupedCases).map(([date, dateCases]: [string, Case[]]) => (
                 <View key={date} style={styles.dateGroup}>
@@ -424,6 +489,16 @@ const styles = StyleSheet.create({
   },
   spacer: {
     height: 16, // h-4
+  },
+  loadingContainer: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    color: '#6B7280',
+    fontSize: 16,
   },
 });
 
