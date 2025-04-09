@@ -96,7 +96,7 @@ export default function DashboardScreen() {
 
   const handleLogout = () => {
     // In a real app, this would handle the logout process
-    alert("Logging out...")
+    alert("Logged out!")
     router.replace("/")
   }
 

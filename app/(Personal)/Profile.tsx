@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import {
   View,
   Text,
@@ -14,15 +14,19 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  Animated,
+  Dimensions,
 } from "react-native"
-import { Camera, Image as ImageIcon, Check, Mail, Phone, Edit2 } from "react-native-feather"
+import { Camera, Image as ImageIcon, Check, Mail, Phone, Edit2, X } from "react-native-feather"
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from "react-native-safe-area-context"
 import { auth, db } from "../../FirebaseConfig"
 import { doc, getDoc, updateDoc } from "firebase/firestore"
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage"
 import { User } from "../../types/models/User"
-
+import { useRouter } from "expo-router"
+import AsyncStorage from "@react-native-async-storage/async-storage"
+import { signOut } from "firebase/auth"
 
 export default function ProfileScreen() {
   const [userData, setUserData] = useState<User | null>(null)
@@ -31,8 +35,12 @@ export default function ProfileScreen() {
   const [photoModalVisible, setPhotoModalVisible] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [showLogoutNotification, setShowLogoutNotification] = useState(false)
+  const fadeAnim = useRef(new Animated.Value(0)).current
+  const scaleAnim = useRef(new Animated.Value(0.8)).current
+  const timerRef = useRef<NodeJS.Timeout | null>(null)
+  const router = useRouter()
 
-  // Fetch user data on component mount
   useEffect(() => {
     fetchUserData()
   }, [])
@@ -63,7 +71,6 @@ export default function ProfileScreen() {
     }
   }
 
-  // Request permissions on component mount
   useEffect(() => {
     ;(async () => {
       if (Platform.OS !== "web") {
@@ -79,10 +86,8 @@ export default function ProfileScreen() {
 
   const handleEditToggle = async () => {
     if (isEditing && editedData) {
-      // Save changes
       await saveChanges()
     } else {
-      // Start editing - copy current data to edited data
       setEditedData(userData)
     }
     setIsEditing(!isEditing)
@@ -95,7 +100,6 @@ export default function ProfileScreen() {
     try {
       const userDocRef = doc(db, "users", auth.currentUser.uid)
       
-      // Prepare update data
       const updateData = {
         name: editedData.name,
         phone: editedData.phone,
@@ -104,10 +108,8 @@ export default function ProfileScreen() {
         updatedAt: new Date()
       }
       
-      // Update Firestore document
       await updateDoc(userDocRef, updateData)
       
-      // Update local state
       setUserData(editedData)
       
       Alert.alert("Success", "Profile updated successfully")
@@ -119,7 +121,6 @@ export default function ProfileScreen() {
     }
   }
 
-  // Update the handleInputChange function with proper type annotations
   const handleInputChange = (field: keyof User, value: string) => {
     if (!editedData) return
     
@@ -150,7 +151,6 @@ export default function ProfileScreen() {
         },
       )
     } else {
-      // For Android and other platforms, show modal
       setPhotoModalVisible(true)
     }
   }
@@ -160,7 +160,7 @@ export default function ProfileScreen() {
 
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
+      allowsEditing: true,  
       aspect: [1, 1],
       quality: 0.8,
     })
@@ -193,18 +193,15 @@ export default function ProfileScreen() {
     try {
       setIsSaving(true)
       
-      // Create blob from URI
       const response = await fetch(uri)
       const blob = await response.blob()
       
-      // Upload to Firebase Storage
       const storage = getStorage()
       const storageRef = ref(storage, `profile-images/${auth.currentUser.uid}/${Date.now()}`)
       
       const uploadTask = await uploadBytes(storageRef, blob)
       const downloadURL = await getDownloadURL(uploadTask.ref)
       
-      // Update image in edited data
       handleInputChange("profileImage", downloadURL)
       
     } catch (error) {
@@ -213,6 +210,103 @@ export default function ProfileScreen() {
     } finally {
       setIsSaving(false)
     }
+  }
+
+  const handleLogoutStart = () => {
+    console.log("Logout process started");
+  };
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (showLogoutNotification) {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          friction: 8,
+          tension: 40,
+          useNativeDriver: true,
+        })
+      ]).start()
+
+      timerRef.current = setTimeout(() => {
+        handleLogoutConfirm()
+      }, 3000)
+    } else {
+      fadeAnim.setValue(0)
+      scaleAnim.setValue(0.8)
+    }
+  }, [showLogoutNotification])
+
+  const handleLogoutPress = () => {
+    setShowLogoutNotification(true)
+  }
+
+  const handleLogoutConfirm = async () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+    
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 0.8,
+        duration: 200,
+        useNativeDriver: true,
+      })
+    ]).start(async () => {
+      setShowLogoutNotification(false)
+      
+      try {
+        await signOut(auth)
+        
+        await AsyncStorage.removeItem("authUser")
+        await AsyncStorage.removeItem("userRole")
+        
+        router.replace('/Roleselection')
+      } catch (error) {
+        console.error("Error during logout:", error)
+        Alert.alert("Error", "Failed to log out")
+      }
+    })
+  }
+
+  const handleLogoutCancel = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+    
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 0.8,
+        duration: 200,
+        useNativeDriver: true,
+      })
+    ]).start(() => {
+      setShowLogoutNotification(false)
+    })
   }
 
   if (isLoading) {
@@ -242,7 +336,6 @@ export default function ProfileScreen() {
         style={styles.flex1}
       >
         <ScrollView style={styles.flex1}>
-          {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerContent}>
               <Text style={styles.headerTitle}>My Profile</Text>
@@ -264,7 +357,6 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          {/* Profile Image */}
           <View style={styles.profileImageContainer}>
             <View style={styles.profileImageWrapper}>
               <View style={styles.profileImageBorder}>
@@ -290,7 +382,6 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          {/* Profile Info */}
           <View style={styles.profileInfoContainer}>
             <View style={styles.infoCard}>
               <Text style={styles.sectionTitle}>PERSONAL INFORMATION</Text>
@@ -387,11 +478,19 @@ export default function ProfileScreen() {
             <TouchableOpacity style={styles.refreshButton} onPress={fetchUserData}>
               <Text style={styles.refreshButtonText}>Refresh Profile Data</Text>
             </TouchableOpacity>
+
+            <View style={styles.logoutContainer}>
+              <TouchableOpacity
+                style={styles.customLogoutButton}
+                onPress={handleLogoutPress}
+              >
+                <Text style={styles.customLogoutText}>Log Out</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* Photo Options Modal (for Android and other platforms) */}
       <Modal
         animationType="fade"
         transparent={true}
@@ -425,6 +524,34 @@ export default function ProfileScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {showLogoutNotification && (
+        <View style={styles.logoutOverlay}>
+          <Animated.View 
+            style={[
+              styles.logoutBackdrop, 
+              { opacity: fadeAnim }
+            ]} 
+          />
+          <Animated.View
+            style={[
+              styles.logoutNotification,
+              { 
+                opacity: fadeAnim,
+                transform: [{ scale: scaleAnim }]
+              }
+            ]}
+          >
+            <Text style={styles.logoutNotificationText}>You have been logged out</Text>
+            <TouchableOpacity 
+              style={styles.logoutCloseButton}
+              onPress={handleLogoutConfirm}
+            >
+              <X width={20} height={20} color="#FFFFFF" />
+            </TouchableOpacity>
+          </Animated.View>
+        </View>
+      )}
     </SafeAreaView>
   )
 }
@@ -432,7 +559,7 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB', // bg-gray-50
+    backgroundColor: '#F9FAFB',
   },
   centered: {
     justifyContent: 'center',
@@ -442,7 +569,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    backgroundColor: '#4F46E5', // bg-indigo-600
+    backgroundColor: '#4F46E5',
     paddingTop: 16,
     paddingBottom: 80,
   },
@@ -458,7 +585,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   editButton: {
-    backgroundColor: '#6366F1', // bg-indigo-500
+    backgroundColor: '#6366F1',
     padding: 8,
     borderRadius: 9999,
   },
@@ -467,7 +594,7 @@ const styles = StyleSheet.create({
   },
   profileImageContainer: {
     alignItems: 'center',
-    marginTop: -64, // -mt-16
+    marginTop: -64,
     marginBottom: 24,
   },
   profileImageWrapper: {
@@ -492,7 +619,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 0,
     right: 0,
-    backgroundColor: '#6366F1', // bg-indigo-500
+    backgroundColor: '#6366F1',
     padding: 8,
     borderRadius: 9999,
     borderWidth: 2,
@@ -514,7 +641,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   sectionTitle: {
-    color: '#6B7280', // text-gray-500
+    color: '#6B7280',
     fontSize: 14,
     marginBottom: 8,
   },
@@ -522,7 +649,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   fieldLabel: {
-    color: '#6B7280', // text-gray-500
+    color: '#6B7280',
     fontSize: 14,
     marginBottom: 4,
   },
@@ -535,44 +662,44 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   fieldValueName: {
-    color: '#1F2937', // text-gray-800
+    color: '#1F2937',
     fontSize: 18,
-    fontWeight: '600', // font-semibold
+    fontWeight: '600',
   },
   fieldValueBio: {
-    color: '#374151', // text-gray-700
+    color: '#374151',
   },
   fieldValueWithPadding: {
-    color: '#374151', // text-gray-700
+    color: '#374151',
     paddingLeft: 24,
   },
   textInput: {
-    backgroundColor: '#F3F4F6', // bg-gray-100
+    backgroundColor: '#F3F4F6',
     borderRadius: 8,
     padding: 12,
-    color: '#1F2937', // text-gray-800
+    color: '#1F2937',
   },
   cancelButton: {
-    backgroundColor: '#FEE2E2', // bg-red-100
+    backgroundColor: '#FEE2E2',
     borderRadius: 8,
     paddingVertical: 12,
     marginTop: 16,
     alignItems: 'center',
   },
   cancelButtonText: {
-    color: '#DC2626', // text-red-600
-    fontWeight: '500', // font-medium
+    color: '#DC2626',
+    fontWeight: '500',
   },
   refreshButton: {
-    backgroundColor: '#F3F4F6', // bg-gray-100
+    backgroundColor: '#F3F4F6',
     borderRadius: 8,
     paddingVertical: 12,
     marginTop: 8,
     alignItems: 'center',
   },
   refreshButtonText: {
-    color: '#4F46E5', // text-indigo-600
-    fontWeight: '500', // font-medium
+    color: '#4F46E5',
+    fontWeight: '500',
   },
   modalOverlay: {
     flex: 1,
@@ -592,13 +719,13 @@ const styles = StyleSheet.create({
   modalHandleBar: {
     width: 40,
     height: 4,
-    backgroundColor: '#D1D5DB', // bg-gray-300
+    backgroundColor: '#D1D5DB',
     borderRadius: 9999,
   },
   modalTitle: {
-    color: '#1F2937', // text-gray-800
+    color: '#1F2937',
     fontSize: 18,
-    fontWeight: '600', // font-semibold
+    fontWeight: '600',
     marginBottom: 16,
   },
   modalOption: {
@@ -611,7 +738,7 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   modalOptionText: {
-    color: '#1F2937', // text-gray-800
+    color: '#1F2937',
     fontSize: 18,
   },
   modalCancelButton: {
@@ -621,38 +748,103 @@ const styles = StyleSheet.create({
     padding: 12,
     marginTop: 8,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB', // border-gray-200
+    borderTopColor: '#E5E7EB',
   },
   modalCancelText: {
-    color: '#EF4444', // text-red-500
+    color: '#EF4444',
     fontSize: 18,
-    fontWeight: '500', // font-medium
+    fontWeight: '500',
   },
   loadingText: {
-    color: '#6B7280', // text-gray-500
+    color: '#6B7280',
     marginTop: 16,
     fontSize: 16,
   },
   errorText: {
-    color: '#EF4444', // text-red-500
+    color: '#EF4444',
     fontSize: 16,
     marginBottom: 16,
   },
   retryButton: {
-    backgroundColor: '#4F46E5', // bg-indigo-600
+    backgroundColor: '#4F46E5',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
   },
   retryText: {
     color: '#FFFFFF',
-    fontWeight: '500', // font-medium
+    fontWeight: '500',
   },
   anaesthetistText: {
-    color: '#4F46E5', // indigo-600
+    color: '#4F46E5',
   },
   clinicText: {
-    color: '#0891B2', // cyan-600
-  }
-});
+    color: '#0891B2',
+  },
+  logoutContainer: {
+    marginTop: 24,
+    marginBottom: 32,
+    position: 'relative',
+    zIndex: 1,
+  },
+  customLogoutButton: {
+    backgroundColor: '#EF4444',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  customLogoutText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  logoutOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 9999,
+  },
+  logoutBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  logoutNotification: {
+    backgroundColor: '#EF4444',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    width: Dimensions.get('window').width * 0.85,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 10,
+  },
+  logoutNotificationText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: '600',
+    flex: 1,
+    marginRight: 12,
+    textAlign: 'center',
+  },
+  logoutCloseButton: {
+    padding: 4,
+  },
+})
 

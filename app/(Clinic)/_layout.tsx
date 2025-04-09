@@ -2,12 +2,13 @@ import { Tabs } from "expo-router"
 import { Home, Briefcase, User } from "react-native-feather"
 import AuthProvider from "../../components/auth/AuthProvider"
 
-export default function AnaesthetistLayout() {
+// Change function name from AnaesthetistLayout to ClinicLayout
+export default function ClinicLayout() {
   return (
     <AuthProvider>
       <Tabs
         screenOptions={{
-          tabBarActiveTintColor: "#4f46e5",
+          tabBarActiveTintColor: "#0891b2", // Change to cyan for clinics
           tabBarInactiveTintColor: "#6b7280",
           tabBarStyle: {
             backgroundColor: "#ffffff",
@@ -28,21 +29,21 @@ export default function AnaesthetistLayout() {
         <Tabs.Screen
           name="ClinicDashboard" // Case matters! Must match file name
           options={{
-            title: "ClinicDashboard", // This is the displayed text
+            title: "Dashboard", // This is the displayed text
             tabBarIcon: ({ color }) => <Home width={22} height={22} stroke={color} />,
           }}
         />
         <Tabs.Screen
-          name="My-jobs" // Case matters! Must match file name
+          name="CreateJobs" // Fix this to match file name
           options={{
-            title: "ListJob", // This is the displayed text (space added)
+            title: "Create Jobs", // This is the displayed text (space added)
             tabBarIcon: ({ color }) => <Briefcase width={22} height={22} stroke={color} />,
           }}
         />
         <Tabs.Screen
           name="Profile" // Case matters! Must match file name
           options={{
-            title: "ClinicProfile", // This is the displayed text
+            title: "Profile", // This is the displayed text
             tabBarIcon: ({ color }) => <User width={22} height={22} stroke={color} />,
           }}
         />

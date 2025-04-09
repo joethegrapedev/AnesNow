@@ -65,8 +65,12 @@ export default function RoleSelection() {
           });
         }
         
-        // Redirect to the appropriate dashboard
-        router.replace("/(Personal)/Dashboard");
+        // Redirect based on selected role
+        if (selectedRole === "anaesthetist") {
+          router.replace("/(Personal)/Dashboard");
+        } else if (selectedRole === "clinic") {
+          router.replace("/(Clinic)/ClinicDashboard");
+        }
       } else {
         // User is not authenticated, redirect to login
         router.push("/login");

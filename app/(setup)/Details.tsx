@@ -21,12 +21,19 @@ import * as ImagePicker from "expo-image-picker";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 export default function Details() {
+  // Common fields for both roles
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [userRole, setUserRole] = useState<"anaesthetist" | "clinic" | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [profileImage, setProfileImage] = useState<string | null>(null);
+  
+  // Clinic-specific fields
+  const [clinicName, setClinicName] = useState("");
+  const [clinicPhone, setClinicPhone] = useState("");
+  const [clinicAddress, setClinicAddress] = useState("");
+  
   const router = useRouter();
 
   useEffect(() => {
@@ -56,6 +63,11 @@ export default function Details() {
           if (userData.name) setName(userData.name);
           if (userData.phone) setPhone(userData.phone);
           if (userData.profileImage) setProfileImage(userData.profileImage);
+          
+          // Load clinic-specific data if available
+          if (userData.clinicName) setClinicName(userData.clinicName);
+          if (userData.clinicPhone) setClinicPhone(userData.clinicPhone);
+          if (userData.clinicAddress) setClinicAddress(userData.clinicAddress);
         }
       } catch (error) {
         console.error("Error checking user role:", error);
@@ -66,6 +78,7 @@ export default function Details() {
   }, []);
 
   const handlePickImage = async () => {
+    // Your existing image picker code
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     
     if (permissionResult.granted === false) {
@@ -98,6 +111,7 @@ export default function Details() {
   };
 
   const uploadProfileImage = async (uri: string): Promise<string> => {
+    // Your existing upload code
     const user = auth.currentUser;
     if (!user) throw new Error("No user logged in");
     
@@ -114,14 +128,37 @@ export default function Details() {
   };
 
   const handleSaveDetails = async () => {
-    if (!name.trim()) {
-      alert("Please enter your name");
-      return;
-    }
-    
-    if (!phone.trim()) {
-      alert("Please enter your phone number");
-      return;
+    // Modified validation to check appropriate fields based on role
+    if (userRole === "anaesthetist") {
+      if (!name.trim()) {
+        alert("Please enter your full name");
+        return;
+      }
+      
+      if (!phone.trim()) {
+        alert("Please enter your phone number");
+        return;
+      }
+    } else if (userRole === "clinic") {
+      if (!name.trim()) {
+        alert("Please enter the surgeon's name");
+        return;
+      }
+      
+      if (!clinicName.trim()) {
+        alert("Please enter the clinic name");
+        return;
+      }
+      
+      if (!clinicPhone.trim()) {
+        alert("Please enter the clinic phone number");
+        return;
+      }
+      
+      if (!clinicAddress.trim()) {
+        alert("Please enter the clinic address");
+        return;
+      }
     }
 
     const user = auth.currentUser;
@@ -134,8 +171,7 @@ export default function Details() {
     try {
       const userDocRef = doc(db, "users", user.uid);
       
-      // Update user document with completed profile
-      // Profile image is now optional, so we create an update object without it if null
+      // Create base update data
       const updateData: any = {
         name,
         phone,
@@ -143,15 +179,26 @@ export default function Details() {
         updatedAt: new Date()
       };
       
-      // Only include profileImage if one was selected/uploaded
+      // Add profile image if available
       if (profileImage) {
         updateData.profileImage = profileImage;
       }
       
+      // Add clinic-specific fields if the user is a clinic
+      if (userRole === "clinic") {
+        updateData.clinicName = clinicName;
+        updateData.clinicPhone = clinicPhone;
+        updateData.clinicAddress = clinicAddress;
+      }
+      
       await updateDoc(userDocRef, updateData);
       
-      // Navigate to dashboard
-      router.replace("/(Personal)/Dashboard");
+      // Navigate to the appropriate dashboard based on role
+      if (userRole === "anaesthetist") {
+        router.replace("/(Personal)/Dashboard");
+      } else if (userRole === "clinic") {
+        router.replace("/(Clinic)/ClinicDashboard");
+      }
     } catch (error: any) {
       console.error("Error saving user details:", error);
       alert(`Failed to save details: ${error.message}`);
@@ -224,33 +271,88 @@ export default function Details() {
           </View>
 
           <View style={styles.formContainer}>
+            {/* Common fields for both roles */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Full Name</Text>
+              <Text style={styles.label}>
+                {userRole === "anaesthetist" ? "Full Name" : "Surgeon Name"}
+              </Text>
               <View style={styles.inputContainer}>
                 <Feather name="user" size={20} color="#666666" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
-                  placeholder="Enter your full name"
+                  placeholder={userRole === "anaesthetist" ? "Enter your full name" : "Enter surgeon name"}
                   value={name}
                   onChangeText={setName}
                 />
               </View>
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Phone Number</Text>
-              <View style={styles.inputContainer}>
-                <Feather name="phone" size={20} color="#666666" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter your phone number"
-                  value={phone}
-                  onChangeText={setPhone}
-                  keyboardType="phone-pad"
-                />
+            {/* Show phone number for anaesthetist */}
+            {userRole === "anaesthetist" && (
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Phone Number</Text>
+                <View style={styles.inputContainer}>
+                  <Feather name="phone" size={20} color="#666666" style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Enter your phone number"
+                    value={phone}
+                    onChangeText={setPhone}
+                    keyboardType="phone-pad"
+                  />
+                </View>
               </View>
-            </View>
+            )}
 
+            {/* Clinic-specific fields */}
+            {userRole === "clinic" && (
+              <>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Clinic Name</Text>
+                  <View style={styles.inputContainer}>
+                    <Feather name="home" size={20} color="#666666" style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Enter clinic name"
+                      value={clinicName}
+                      onChangeText={setClinicName}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Clinic Phone</Text>
+                  <View style={styles.inputContainer}>
+                    <Feather name="phone" size={20} color="#666666" style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Enter clinic phone number"
+                      value={clinicPhone}
+                      onChangeText={setClinicPhone}
+                      keyboardType="phone-pad"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Clinic Address</Text>
+                  <View style={styles.inputContainer}>
+                    <Feather name="map-pin" size={20} color="#666666" style={styles.inputIcon} />
+                    <TextInput
+                      placeholder="Enter clinic address"
+                      value={clinicAddress}
+                      onChangeText={setClinicAddress}
+                      multiline={true}
+                      numberOfLines={3}
+                      textAlignVertical="top"
+                      style={[styles.input, styles.multilineInput]}
+                    />
+                  </View>
+                </View>
+              </>
+            )}
+
+            {/* Role-specific help text */}
             {userRole === "anaesthetist" && (
               <View style={styles.infoBox}>
                 <Feather name="info" size={20} color="#4f46e5" style={styles.infoIcon} />
@@ -264,19 +366,25 @@ export default function Details() {
               <View style={styles.infoBox}>
                 <Feather name="info" size={20} color="#0891b2" style={styles.infoIcon} />
                 <Text style={styles.infoText}>
-                  You can add your clinic address and other details later.
+                  You'll be able to post anaesthesia opportunities once your profile is complete.
                 </Text>
               </View>
             )}
 
+            {/* Save button with appropriate validation */}
             <TouchableOpacity
               style={[
                 styles.saveButton,
                 userRole === "anaesthetist" ? styles.anaesthetistButton : styles.clinicButton,
-                (isLoading || isUploading || !name || !phone) && styles.disabledButton,
+                (isLoading || isUploading || 
+                  (userRole === "anaesthetist" && (!name || !phone)) || 
+                  (userRole === "clinic" && (!name || !clinicName || !clinicPhone || !clinicAddress))
+                ) && styles.disabledButton,
               ]}
               onPress={handleSaveDetails}
-              disabled={isLoading || isUploading || !name || !phone}
+              disabled={isLoading || isUploading || 
+                (userRole === "anaesthetist" && (!name || !phone)) || 
+                (userRole === "clinic" && (!name || !clinicName || !clinicPhone || !clinicAddress))}
             >
               {isLoading ? (
                 <ActivityIndicator color="#ffffff" />
@@ -292,6 +400,7 @@ export default function Details() {
 }
 
 const styles = StyleSheet.create({
+  // Your existing styles
   safeArea: {
     flex: 1,
     backgroundColor: "#f5f5f7",
@@ -412,6 +521,11 @@ const styles = StyleSheet.create({
     height: 56,
     fontSize: 16,
     color: "#1f2937",
+  },
+  multilineInput: {
+    height: 100,
+    textAlignVertical: "top",
+    paddingTop: 16,
   },
   infoBox: {
     flexDirection: "row",

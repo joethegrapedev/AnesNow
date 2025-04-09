@@ -60,9 +60,6 @@ export default function SignInScreen() {
 
     setIsLoading(true);
     try {
-      // Remove the web-specific setPersistence call
-      // We'll handle persistence with AsyncStorage instead
-
       let userCredential;
       if (isSignIn) {
         // Sign In
@@ -115,9 +112,22 @@ export default function SignInScreen() {
           const userData = userDoc.data();
           // Verify that the user has the correct role
           if (userData.role === userRole) {
+            // Save the role to AsyncStorage for persistence
+            await AsyncStorage.setItem("userRole", userData.role);
+            
             // Check if profile is complete
             if (userData.isProfileComplete === true) {
-              router.replace("/(Personal)/Dashboard");
+              // UPDATED: Route based on role
+              console.log("User role:", userRole);
+              console.log("User data role:", userData.role);
+              console.log("Navigating to dashboard based on role:", userData.role);
+              if (userData.role === "anaesthetist") {
+                console.log("Redirecting to anaesthetist dashboard");
+                router.replace("/(Personal)/Dashboard");
+              } else if (userData.role === "clinic") {
+                console.log("Redirecting to clinic dashboard");
+                router.replace("/(Clinic)/ClinicDashboard");
+              }
             } else {
               // Profile not complete, redirect to Details page
               router.replace("/(setup)/Details");
