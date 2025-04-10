@@ -12,15 +12,17 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  Animated,
 } from "react-native"
-import { Calendar, Clock, Users, ChevronRight } from "react-native-feather"
+import { Users, ChevronRight, CheckCircle } from "react-native-feather"
 import { router } from "expo-router"
 import AnaesthetistCard from "../../components/Clinic/AnaesthetistCard"
-import DateTimePicker from "@react-native-community/datetimepicker"
 import { MedicalProcedure, VisibilityMode, UserData } from "../../data/mockData"
 import { db, auth } from "../../FirebaseConfig"
-import { collection, query, where, getDocs, limit, addDoc } from "firebase/firestore"
-import { createProcedure, testFirebaseConnection } from "../../data/ProceduresService"
+import { collection, query, where, getDocs } from "firebase/firestore"
+import { createProcedure } from "../../data/ProceduresService"
+import DatePicker from '../../components/Clinic/CreateJobs/DatePicker';
+import TimePicker from '../../components/Clinic/CreateJobs/TimePicker';
 
 export default function CreateJobScreen() {
   const [jobData, setJobData] = useState<Partial<MedicalProcedure>>({
@@ -43,77 +45,20 @@ export default function CreateJobScreen() {
     sequentialOfferDuration: 24,
   })
 
-  const [showDatePicker, setShowDatePicker] = useState(false)
-  const [showTimePicker, setShowTimePicker] = useState(false)
-  const [showPreferredAnaesthetists, setShowPreferredAnaesthetists] = useState(false)
   const [loading, setLoading] = useState(false)
   const [anaesthetists, setAnaesthetists] = useState<UserData[]>([])
-  const [startTimeDate, setStartTimeDate] = useState(new Date())
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [showSuccessNotification, setShowSuccessNotification] = useState(false);
+  const [notificationMessage, setNotificationMessage] = useState("");
+  const [showPreferredAnaesthetists, setShowPreferredAnaesthetists] = useState(false);
+
+  const [notificationOpacity] = useState(new Animated.Value(0));
+  const [notificationOffset] = useState(new Animated.Value(-50));
 
   useEffect(() => {
     fetchAnaesthetists()
   }, [])
-
-  // Check Firebase connection on mount
-  useEffect(() => {
-    const checkFirebase = async () => {
-      try {
-        console.log("Testing Firebase connection...");
-        const result = await testFirebaseConnection();
-        console.log("Firebase connection test result:", result);
-        
-        // Also check if the 'procedures' collection exists
-        try {
-          const proceduresRef = collection(db, "procedures");
-          const testQuery = query(proceduresRef, limit(1));
-          const snapshot = await getDocs(testQuery);
-          console.log("Procedures collection exists, document count:", snapshot.size);
-        } catch (collectionError) {
-          console.error("Error accessing procedures collection:", collectionError);
-        }
-      } catch (error) {
-        console.error("Firebase connection test failed:", error);
-      }
-    };
-    
-    checkFirebase();
-  }, []);
-
-  const testDirectFirebase = async () => {
-    try {
-      console.log("DIRECT FIREBASE TEST: Starting");
-      setLoading(true);
-      
-      // Check authentication
-      if (!auth.currentUser) {
-        console.log("DIRECT FIREBASE TEST: Not authenticated");
-        Alert.alert("Error", "Not authenticated. Please log in first.");
-        return;
-      }
-      
-      // Try to write a very simple test document
-      const testCollection = collection(db, "test_docs");
-      const testDoc = {
-        text: "Test from CreateJobs",
-        timestamp: new Date().toISOString(),
-        creator: auth.currentUser.uid
-      };
-      
-      console.log("DIRECT FIREBASE TEST: Attempting write:", testDoc);
-      const docRef = await addDoc(testCollection, testDoc);
-      console.log("DIRECT FIREBASE TEST: Success! Doc ID:", docRef.id);
-      
-      Alert.alert("Test Success", `Created test document with ID: ${docRef.id}`);
-      return true;
-    } catch (error) {
-      console.error("DIRECT FIREBASE TEST FAILED:", error);
-      Alert.alert("Test Failed", `Error: ${error instanceof Error ? error.message : "Unknown error"}`);
-      return false;
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const fetchAnaesthetists = async () => {
     try {
@@ -139,34 +84,24 @@ export default function CreateJobScreen() {
   }
 
   const handleInputChange = (field: string, value: any) => {
-    console.log(`Setting ${field} to:`, value)
-    setJobData((prev) => ({
+    console.log(`Setting ${field} to:`, value);
+    setJobData(prev => ({
       ...prev,
       [field]: value,
-    }))
-  }
-
-  const handleDateChange = (_event: any, selectedDate?: Date) => {
-    setShowDatePicker(false)
-    if (selectedDate) {
-      console.log("Selected date:", selectedDate.toISOString())
-      handleInputChange("date", selectedDate.toISOString())
+    }));
+    
+    if (fieldErrors[field]) {
+      clearFieldError(field);
     }
-  }
+  };
 
-  const handleTimeChange = (_event: any, selectedTime?: Date) => {
-    setShowTimePicker(false)
-    if (selectedTime) {
-      setStartTimeDate(selectedTime)
-      const formattedTime = selectedTime.toLocaleTimeString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      })
-      console.log("Selected time:", formattedTime)
-      handleInputChange("startTime", formattedTime)
-    }
-  }
+  const clearFieldError = (field: string) => {
+    setFieldErrors(prev => {
+      const updated = { ...prev };
+      delete updated[field];
+      return updated;
+    });
+  };
 
   const togglePreferredAnaesthetist = (anaesthetistId: string) => {
     setJobData((prev) => {
@@ -188,34 +123,64 @@ export default function CreateJobScreen() {
   }
 
   const validateForm = () => {
-    if (!jobData.surgeryName) {
-      Alert.alert("Error", "Please enter a surgery name")
-      return false
+    const errors: Record<string, string> = {};
+    let isFormValid = true;
+
+    if (!jobData.surgeryName?.trim()) {
+      errors.surgeryName = "Surgery name is required";
+      isFormValid = false;
     }
 
-    if (!jobData.surgeonName) {
-      Alert.alert("Error", "Please enter a surgeon name")
-      return false
+    if (!jobData.surgeonName?.trim()) {
+      errors.surgeonName = "Surgeon name is required";
+      isFormValid = false;
     }
 
     if (!jobData.date) {
-      Alert.alert("Error", "Please select a date")
-      return false
+      errors.date = "Date is required";
+      isFormValid = false;
+    } else {
+      try {
+        const dateObj = new Date(jobData.date);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (dateObj < today) {
+          errors.date = "Date cannot be in the past";
+          isFormValid = false;
+        }
+      } catch (e) {
+        errors.date = "Invalid date format";
+        isFormValid = false;
+      }
     }
 
     if (!jobData.startTime) {
-      Alert.alert("Error", "Please select a start time")
-      return false
+      errors.startTime = "Start time is required";
+      isFormValid = false;
     }
 
-    if (!jobData.duration) {
-      Alert.alert("Error", "Please enter a duration")
-      return false
+    if (!jobData.duration?.trim()) {
+      errors.duration = "Duration is required";
+      isFormValid = false;
     }
 
-    if (!jobData.location) {
-      Alert.alert("Error", "Please enter a location")
-      return false
+    if (!jobData.location?.trim()) {
+      errors.location = "Location is required";
+      isFormValid = false;
+    }
+
+    if (jobData.fee === undefined || jobData.fee === null) {
+      errors.fee = "Fee is required";
+      isFormValid = false;
+    } else {
+      const feeValue = typeof jobData.fee === 'string' 
+        ? parseFloat(jobData.fee) 
+        : jobData.fee;
+      
+      if (isNaN(feeValue)) {
+        errors.fee = "Fee must be a number";
+        isFormValid = false;
+      }
     }
 
     if (
@@ -224,58 +189,113 @@ export default function CreateJobScreen() {
         jobData.visibilityMode === "timed") &&
       (!jobData.preferredAnaesthetists || jobData.preferredAnaesthetists.length === 0)
     ) {
-      Alert.alert("Error", "Please select at least one preferred anaesthetist")
-      return false
+      errors.preferredAnaesthetists = "Select at least one preferred anaesthetist";
+      isFormValid = false;
     }
 
-    return true
-  }
+    if (jobData.visibilityMode === "sequential") {
+      const duration = typeof jobData.sequentialOfferDuration === 'string'
+        ? parseInt(jobData.sequentialOfferDuration)
+        : jobData.sequentialOfferDuration;
+      
+      if (!duration || isNaN(duration) || duration <= 0) {
+        errors.sequentialOfferDuration = "Enter a positive number of hours";
+        isFormValid = false;
+      }
+    }
+
+    if (jobData.visibilityMode === "timed") {
+      const days = typeof jobData.timeDelayDays === 'string'
+        ? parseInt(jobData.timeDelayDays)
+        : jobData.timeDelayDays;
+      
+      if (!days || isNaN(days) || days <= 0) {
+        errors.timeDelayDays = "Enter a positive number of days";
+        isFormValid = false;
+      }
+    }
+
+    setFieldErrors(errors);
+    
+    if (!isFormValid) {
+      setTimeout(() => {
+        for (const field of Object.keys(errors)) {
+          const element = document.getElementById(`field-${field}`);
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            break;
+          }
+        }
+      }, 100);
+    }
+
+    return isFormValid;
+  };
+
+  const showNotificationWithAnimation = (message: string) => {
+    // Reset animation values
+    notificationOpacity.setValue(0);
+    notificationOffset.setValue(-50);
+    
+    // Update message and show notification
+    setNotificationMessage(message);
+    setShowSuccessNotification(true);
+    
+    // Animate in
+    Animated.stagger(100, [
+      Animated.spring(notificationOffset, {
+        toValue: 0,
+        tension: 80,
+        friction: 9,
+        useNativeDriver: true
+      }),
+      Animated.timing(notificationOpacity, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true
+      })
+    ]).start();
+    
+    // Animate out after delay
+    setTimeout(() => {
+      Animated.parallel([
+        Animated.timing(notificationOpacity, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true
+        }),
+        Animated.timing(notificationOffset, {
+          toValue: -50,
+          duration: 250,
+          useNativeDriver: true
+        })
+      ]).start(() => {
+        setShowSuccessNotification(false);
+      });
+    }, 3000);
+  };
 
   const handleSubmit = async () => {
-    // Prevent multiple submissions
     if (isSubmitting) return;
     
     try {
-      // Validate form
       if (!validateForm()) {
         return;
       }
       
-      // Set submitting state
       setIsSubmitting(true);
       console.log("SUBMIT: Starting job creation...");
       
-      // Check auth
       if (!auth.currentUser) {
         console.error("SUBMIT: No authenticated user");
         Alert.alert("Authentication Required", "You must be logged in to create a job");
         return;
       }
       
-      console.log("SUBMIT: User authenticated as", auth.currentUser.uid);
-      
-      // Test Firebase connection first
-      try {
-        console.log("SUBMIT: Testing Firebase connection...");
-        const connectionTest = await testFirebaseConnection();
-        if (!connectionTest) {
-          Alert.alert("Connection Error", "Could not connect to the database. Please check your internet connection and try again.");
-          return;
-        }
-        console.log("SUBMIT: Firebase connection test passed");
-      } catch (connectionError) {
-        console.error("SUBMIT: Firebase connection test failed:", connectionError);
-        Alert.alert("Connection Error", "Failed to connect to the database");
-        return;
-      }
-      
-      // Create a fresh copy of the data
       const cleanData = JSON.parse(JSON.stringify(jobData));
       
-      // Convert form data for Firestore
       const enhancedJobData: Partial<MedicalProcedure> = {
         ...cleanData,
-        // Ensure numeric fields are numbers
         fee: typeof cleanData.fee === 'string' ? parseFloat(cleanData.fee) : (cleanData.fee || 0),
         sequentialOfferDuration: typeof cleanData.sequentialOfferDuration === 'string' 
           ? parseInt(cleanData.sequentialOfferDuration) 
@@ -285,7 +305,6 @@ export default function CreateJobScreen() {
           : (cleanData.timeDelayDays || 2),
       };
       
-      // Add special fields
       if (enhancedJobData.visibilityMode === "sequential") {
         const deadline = new Date();
         const hours = enhancedJobData.sequentialOfferDuration || 24;
@@ -303,25 +322,14 @@ export default function CreateJobScreen() {
       console.log("SUBMIT: Prepared job data:", JSON.stringify(enhancedJobData, null, 2));
       
       try {
-        // Create procedure using service
         console.log("SUBMIT: Calling createProcedure...");
         const newProcedureId = await createProcedure(enhancedJobData);
         
         console.log("SUBMIT: Success! Created procedure ID:", newProcedureId);
         
-        Alert.alert(
-          "Success",
-          "Job created successfully!",
-          [
-            {
-              text: "OK",
-              onPress: () => {
-                console.log("SUBMIT: Navigating to dashboard");
-                router.replace("/(Clinic)/ClinicDashboard");
-              }
-            }
-          ]
-        );
+        showNotificationWithAnimation("Job created successfully!");
+        resetForm();
+        
       } catch (createError) {
         console.error("SUBMIT: Create procedure error:", createError);
         
@@ -340,44 +348,50 @@ export default function CreateJobScreen() {
     }
   };
 
-  const getDateObject = () => {
-    try {
-      return jobData.date ? new Date(jobData.date) : new Date()
-    } catch (e) {
-      return new Date()
-    }
-  }
-
-  const formatDate = (dateString: string) => {
-    try {
-      const date = new Date(dateString)
-      return date.toLocaleDateString("en-US", {
-        weekday: "short",
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      })
-    } catch (e) {
-      return "Select date"
-    }
-  }
+  const resetForm = () => {
+    setJobData({
+      surgeryName: "",
+      surgeonName: "",
+      date: new Date().toISOString(),
+      startTime: new Date().toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      }),
+      duration: "",
+      location: "",
+      fee: 0,
+      remarks: "",
+      visibilityMode: "all" as VisibilityMode,
+      preferredAnaesthetists: [] as string[],
+      autoAccept: false,
+      timeDelayDays: 2,
+      sequentialOfferDuration: 24,
+    });
+    
+    setShowSuccessNotification(false);
+    setFieldErrors({});
+  };
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Debug info - remove for production */}
-      <View style={styles.debugInfo}>
-        <Text style={styles.debugText}>
-          Auth Status: {auth.currentUser ? `Signed in as ${auth.currentUser.email}` : "Not signed in"}
-        </Text>
-      </View>
+      {showSuccessNotification && (
+        <Animated.View 
+          style={[
+            styles.successNotification,
+            {
+              opacity: notificationOpacity,
+              transform: [{ translateY: notificationOffset }]
+            }
+          ]}
+        >
+          <View style={styles.successNotificationContent}>
+            <CheckCircle width={20} height={20} stroke="#FFFFFF" />
+            <Text style={styles.successNotificationText}>{notificationMessage}</Text>
+          </View>
+        </Animated.View>
+      )}
       
-      <TouchableOpacity 
-        style={[styles.testButton, {backgroundColor: '#3B82F6', marginBottom: 12}]}
-        onPress={testDirectFirebase}
-      >
-        <Text style={{color: 'white', fontWeight: '500'}}>Test Firebase</Text>
-      </TouchableOpacity>
-
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.keyboardView}
@@ -389,14 +403,20 @@ export default function CreateJobScreen() {
           <View style={styles.card}>
             <Text style={styles.cardLabel}>SURGERY DETAILS</Text>
 
-            <View style={styles.inputGroup}>
+            <View style={styles.inputGroup} id="field-surgeryName">
               <Text style={styles.label}>Surgery Name</Text>
               <TextInput
-                style={styles.input}
+                style={[
+                  styles.input, 
+                  fieldErrors.surgeryName && styles.inputError
+                ]}
                 value={jobData.surgeryName}
                 onChangeText={(text) => handleInputChange("surgeryName", text)}
                 placeholder="e.g., Laparoscopic Cholecystectomy"
               />
+              {fieldErrors.surgeryName && (
+                <Text style={styles.errorText}>{fieldErrors.surgeryName}</Text>
+              )}
             </View>
 
             <View style={styles.inputGroup}>
@@ -409,44 +429,21 @@ export default function CreateJobScreen() {
               />
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Date</Text>
-              <TouchableOpacity
-                style={styles.dateInput}
-                onPress={() => setShowDatePicker(true)}
-              >
-                <Calendar width={20} height={20} stroke="#6B7280" style={styles.inputIcon} />
-                <Text style={styles.inputText}>{formatDate(jobData.date || "")}</Text>
-              </TouchableOpacity>
-              {showDatePicker && (
-                <DateTimePicker
-                  value={getDateObject()}
-                  mode="date"
-                  display="default"
-                  onChange={handleDateChange}
-                  minimumDate={new Date()}
-                />
-              )}
-            </View>
+            <DatePicker
+              label="Date"
+              value={jobData.date ?? ''}
+              onChange={(dateStr, dateObj) => handleInputChange("date", dateStr)}
+              error={fieldErrors.date}
+              testID="field-date"
+            />
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Start Time</Text>
-              <TouchableOpacity
-                style={styles.dateInput}
-                onPress={() => setShowTimePicker(true)}
-              >
-                <Clock width={20} height={20} stroke="#6B7280" style={styles.inputIcon} />
-                <Text style={styles.inputText}>{jobData.startTime || "Select time"}</Text>
-              </TouchableOpacity>
-              {showTimePicker && (
-                <DateTimePicker
-                  value={startTimeDate}
-                  mode="time"
-                  display="default"
-                  onChange={handleTimeChange}
-                />
-              )}
-            </View>
+            <TimePicker
+              label="Start Time"
+              value={jobData.startTime ?? ''}
+              onChange={(timeStr, timeObj) => handleInputChange("startTime", timeStr)}
+              error={fieldErrors.startTime}
+              testID="field-startTime"
+            />
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Duration</Text>
@@ -468,15 +465,21 @@ export default function CreateJobScreen() {
               />
             </View>
 
-            <View style={styles.inputGroup}>
+            <View style={styles.inputGroup} id="field-fee">
               <Text style={styles.label}>Fee (USD)</Text>
               <TextInput
-                style={styles.input}
+                style={[
+                  styles.input, 
+                  fieldErrors.fee && styles.inputError
+                ]}
                 value={jobData.fee?.toString()}
                 onChangeText={(text) => handleInputChange("fee", text)}
                 placeholder="e.g., 1200"
                 keyboardType="numeric"
               />
+              {fieldErrors.fee && (
+                <Text style={styles.errorText}>{fieldErrors.fee}</Text>
+              )}
             </View>
           </View>
 
@@ -712,12 +715,17 @@ const styles = StyleSheet.create({
     padding: 12,
     color: "#1F2937",
   },
-  dateInput: {
-    backgroundColor: "#F3F4F6",
-    borderRadius: 8,
-    padding: 12,
-    flexDirection: "row",
-    alignItems: "center",
+  pickerButton: {
+    backgroundColor: '#4F46E5',
+    borderRadius: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginLeft: 8,
+  },
+  pickerButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '500',
+    fontSize: 12,
   },
   inputIcon: {
     marginRight: 8,
@@ -806,22 +814,45 @@ const styles = StyleSheet.create({
   disabledButton: {
     backgroundColor: "#A5B4FC",
   },
-  debugInfo: {
-    backgroundColor: '#FFFBEB',
-    padding: 8,
-    borderRadius: 4,
-    marginBottom: 8,
+  inputError: {
+    backgroundColor: "#FEF2F2",
     borderWidth: 1,
-    borderColor: '#FEF3C7',
+    borderColor: "#F87171",
   },
-  debugText: {
-    color: '#92400E',
+  errorText: {
+    color: "#EF4444",
     fontSize: 12,
+    marginTop: 4,
   },
-  testButton: {
-    padding: 12,
+  successNotification: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 50 : 20,
+    left: 16,
+    right: 16,
+    backgroundColor: '#10B981',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    zIndex: 100,
     borderRadius: 8,
-    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 5,
+    elevation: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  successNotificationContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  successNotificationText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 15,
+    marginLeft: 8,
   },
 })
 
