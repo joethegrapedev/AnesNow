@@ -1,4 +1,5 @@
-import { JobStatus } from "../components/Anaesthetist/JobCard";
+// Define JobStatus directly
+export type JobStatus = 'available' | 'pending' | 'completed' | 'accepted' | 'confirmed' | 'cancelled';
 
 // Visibility mode options
 export type VisibilityMode = 'specific' | 'sequential' | 'timed' | 'all';
@@ -40,7 +41,7 @@ export interface MedicalProcedure {
 
 // User data interface for profile information
 export interface UserData {
-  uid?: string;  // Firebase Auth UID
+  uid: string;  // Firebase Auth UID
   name: string;
   email: string;
   phone: string;

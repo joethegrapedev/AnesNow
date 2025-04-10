@@ -2,7 +2,7 @@ import { useRef, useEffect } from "react"
 import { View, TouchableOpacity, Text, Animated, Pressable, StyleSheet } from "react-native"
 import { User } from "react-native-feather"
 import { router } from "expo-router"
-import Logout from "../../components/Functions/Logout"
+import Logout from "../auth/Logout"
     
 interface UserMenuProps {
   isVisible: boolean

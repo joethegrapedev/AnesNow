@@ -1,25 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Calendar, Clock, MapPin, DollarSign, User, AlertCircle, Clock as ClockTimer } from 'react-native-feather';
+import { Job } from '../../data/mockData'; // Import JobStatus type
 
-export type JobStatus = 'available' | 'pending' | 'confirmed' | 'completed';
-
-export interface Job {
-  id: string;
-  date: string;
-  startTime: string;
-  duration: string;
-  surgeryName: string;
-  surgeonName: string;
-  location: string;
-  fee: number;
-  status: JobStatus;
-  isPriority?: boolean;
-  remarks?: string;
-  visibilityMode?: 'specific' | 'sequential' | 'timed' | 'all';
-  sequentialOfferDeadline?: string;
-  visibleToAllAfter?: string;
-}
+// export interface Job {
+//   id: string;
+//   date: string;
+//   startTime: string;
+//   duration: string;
+//   surgeryName: string;
+//   surgeonName: string;
+//   location: string;
+//   fee: number;
+//   status: JobStatus;
+//   isPriority?: boolean;
+//   remarks?: string;
+//   visibilityMode?: 'specific' | 'sequential' | 'timed' | 'all';
+//   sequentialOfferDeadline?: string;
+//   visibleToAllAfter?: string;
+// }
 
 // Add a helper function to calculate time remaining
 const getTimeRemaining = (deadline: string): { hours: number, minutes: number, total: number } => {

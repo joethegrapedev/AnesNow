@@ -1,7 +1,7 @@
 import { View, Text, ScrollView, RefreshControl, StyleSheet } from "react-native"
 import { useState } from "react"
-import JobCard, { Job, JobStatus } from "../JobCard"
-import { mockAvailableJobs, getJobsByStatus } from "../../../data/mockData" // Import from centralized data file
+import JobCard from "../JobCard"
+import { mockAvailableJobs, getJobsByStatus, JobStatus, Job } from "../../../data/mockData" // Import types from mockData
 
 export default function AvailableJobs() {
   const [refreshing, setRefreshing] = useState(false)
@@ -52,7 +52,7 @@ export default function AvailableJobs() {
       >
         {sortedJobs.length > 0 ? (
           <>
-            {sortedJobs.map((job: Job) => (
+            {sortedJobs.map((job) => (
               <JobCard 
                 key={job.id} 
                 job={job}

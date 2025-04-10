@@ -3,7 +3,7 @@ import {auth} from '@/FirebaseConfig'
 import { getAuth } from 'firebase/auth';
 import { useRouter } from 'expo-router';
 import { View, Text, StyleSheet, TouchableOpacity, Touchable } from 'react-native';
-import Logout from "../../components/Functions/Logout"
+import Logout from "../../components/auth/Logout"
 
 export default function SignoutScreen() {
   const router = useRouter();
