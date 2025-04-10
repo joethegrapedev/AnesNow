@@ -1,3 +1,5 @@
+import { FieldValue } from 'firebase/firestore';
+
 // Define JobStatus directly
 export type JobStatus = 'available' | 'pending' | 'completed' | 'accepted' | 'confirmed' | 'cancelled';
 
@@ -14,6 +16,7 @@ export interface MedicalProcedure {
   surgeryName: string;
   remarks?: string;
   fee?: number;  // Keeping as optional
+  startTime: string; // Add this property
   
   // New visibility system fields
   visibilityMode?: VisibilityMode;  // Making optional for backward compatibility
@@ -31,11 +34,12 @@ export interface MedicalProcedure {
   timeDelayDays?: number;  // Days before showing to all
   visibleToAllAfter?: string;  // ISO timestamp when job becomes visible to all
   
-  // Timestamps
-  createdAt?: string;  // ISO timestamp of creation
-  updatedAt?: string;  // ISO timestamp of last update
+  // Timestamps - update these to accept FieldValue
+  createdAt?: string | FieldValue;  // ISO timestamp of creation
+  updatedAt?: string | FieldValue;  // ISO timestamp of last update
   
-  // Legacy field (will be replaced by visibilityMode)
+  // Other fields
+  status?: string;
   isPriority?: boolean;
 }
 
@@ -92,6 +96,7 @@ export const mockProcedures: Record<string, MedicalProcedure> = {
   "proc-001": {
     id: "proc-001",
     date: "Mon, 15 Apr 2024",
+    startTime: "09:00 AM",
     duration: "2 hours",
     location: "City General Hospital, OR 3",
     surgeonName: "Dr. Sarah Johnson",
@@ -99,7 +104,6 @@ export const mockProcedures: Record<string, MedicalProcedure> = {
     remarks: "Patient has history of hypertension. Please review pre-op assessment.",
     isPriority: true,
     fee: 1200,
-    // New fields
     visibilityMode: "specific",
     preferredAnaesthetists: ["user-001", "user-002"],
     autoAccept: false,
@@ -109,6 +113,7 @@ export const mockProcedures: Record<string, MedicalProcedure> = {
   "proc-002": {
     id: "proc-002",
     date: "Wed, 17 Apr 2024",
+    startTime: "11:30 AM",
     duration: "1.5 hours",
     location: "Orthopaedic Specialists Clinic",
     surgeonName: "Dr. Michael Chen",
@@ -119,6 +124,7 @@ export const mockProcedures: Record<string, MedicalProcedure> = {
   "proc-003": {
     id: "proc-003",
     date: "Thu, 18 Apr 2024",
+    startTime: "08:00 AM",
     duration: "3 hours",
     location: "City General Hospital, OR 2",
     surgeonName: "Dr. Robert Williams",
@@ -126,12 +132,11 @@ export const mockProcedures: Record<string, MedicalProcedure> = {
     remarks: "Patient is allergic to latex. Please ensure latex-free environment.",
     isPriority: false,
     fee: 1800,
-    // Sequential offering with deadline
     visibilityMode: "sequential",
     preferredAnaesthetists: ["user-002", "user-001"],
     sequentialOfferIndex: 0,
-    sequentialOfferDuration: 60, // 60 minutes to respond
-    sequentialOfferDeadline: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1 hour from now
+    sequentialOfferDuration: 60,
+    sequentialOfferDeadline: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
     autoAccept: false,
     acceptedBy: [],
     createdAt: new Date(2024, 3, 12).toISOString(),
@@ -139,13 +144,13 @@ export const mockProcedures: Record<string, MedicalProcedure> = {
   "proc-004": {
     id: "proc-004",
     date: "Fri, 19 Apr 2024",
+    startTime: "14:00 PM",
     duration: "1 hour",
     location: "Vision Care Center",
     surgeonName: "Dr. Emily Patel",
     surgeryName: "Cataract Surgery",
     isPriority: false,
     fee: 750,
-    // New fields
     visibilityMode: "timed",
     preferredAnaesthetists: ["user-001"],
     timeDelayDays: 3,
@@ -157,6 +162,7 @@ export const mockProcedures: Record<string, MedicalProcedure> = {
   "proc-005": {
     id: "proc-005",
     date: "Mon, 22 Apr 2024",
+    startTime: "10:30 AM",
     duration: "2.5 hours",
     location: "Heart Institute",
     surgeonName: "Dr. James Wilson",
@@ -168,6 +174,7 @@ export const mockProcedures: Record<string, MedicalProcedure> = {
   "proc-006": {
     id: "proc-006",
     date: "Tue, 16 Apr 2024",
+    startTime: "13:00 PM",
     duration: "2 hours",
     location: "City General Hospital, OR 1",
     surgeonName: "Dr. Lisa Thompson",
@@ -178,6 +185,7 @@ export const mockProcedures: Record<string, MedicalProcedure> = {
   "proc-007": {
     id: "proc-007",
     date: "Thu, 18 Apr 2024",
+    startTime: "15:30 PM",
     duration: "1 hour",
     location: "Hand Surgery Specialists",
     surgeonName: "Dr. David Brown",
@@ -189,6 +197,7 @@ export const mockProcedures: Record<string, MedicalProcedure> = {
   "proc-008": {
     id: "proc-008",
     date: "Fri, 19 Apr 2024",
+    startTime: "09:30 AM",
     duration: "2.5 hours",
     location: "Neurology Center",
     surgeonName: "Dr. Patricia Garcia",
@@ -199,6 +208,7 @@ export const mockProcedures: Record<string, MedicalProcedure> = {
   "proc-009": {
     id: "proc-009",
     date: "Mon, 15 Apr 2024",
+    startTime: "08:00 AM",
     duration: "1.5 hours",
     location: "ENT Specialists",
     surgeonName: "Dr. Jennifer Lee",
@@ -209,6 +219,7 @@ export const mockProcedures: Record<string, MedicalProcedure> = {
   "proc-010": {
     id: "proc-010",
     date: "Wed, 24 Apr 2024",
+    startTime: "10:00 AM",
     duration: "3 hours",
     location: "Spine Center",
     surgeonName: "Dr. Thomas Garcia",
@@ -220,6 +231,7 @@ export const mockProcedures: Record<string, MedicalProcedure> = {
   "proc-011": {
     id: "proc-011",
     date: "Fri, 26 Apr 2024",
+    startTime: "14:30 PM",
     duration: "2 hours",
     location: "City General Hospital, OR 4",
     surgeonName: "Dr. Richard Martinez",
@@ -230,6 +242,7 @@ export const mockProcedures: Record<string, MedicalProcedure> = {
   "proc-012": {
     id: "proc-012",
     date: "Mon, 29 Apr 2024",
+    startTime: "11:00 AM",
     duration: "4 hours",
     location: "Cardiac Center",
     surgeonName: "Dr. Elizabeth Wilson",
@@ -241,6 +254,7 @@ export const mockProcedures: Record<string, MedicalProcedure> = {
   "proc-013": {
     id: "proc-013",
     date: "Wed, 24 Apr 2024",
+    startTime: "13:30 PM",
     duration: "2 hours",
     location: "Downtown Surgery Center",
     surgeonName: "Dr. Amanda Lee",
@@ -250,8 +264,8 @@ export const mockProcedures: Record<string, MedicalProcedure> = {
     visibilityMode: "sequential",
     preferredAnaesthetists: ["user-001", "user-002"],
     sequentialOfferIndex: 0,
-    sequentialOfferDuration: 30, // 30 minutes to respond
-    sequentialOfferDeadline: new Date(Date.now() + 15 * 60 * 1000).toISOString(), // 15 minutes from now
+    sequentialOfferDuration: 30,
+    sequentialOfferDeadline: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
     autoAccept: false,
     acceptedBy: [],
     createdAt: new Date().toISOString(),

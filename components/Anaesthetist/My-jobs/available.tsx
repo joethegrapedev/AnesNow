@@ -1,21 +1,47 @@
+import { useState, useEffect } from "react"
 import { View, Text, ScrollView, RefreshControl, StyleSheet } from "react-native"
-import { useState } from "react"
 import JobCard from "../JobCard"
-import { mockAvailableJobs, getJobsByStatus, JobStatus, Job } from "../../../data/mockData" // Import types from mockData
+import { Job, MedicalProcedure, JobStatus } from "../../../data/mockData"
+import { getAnaesthetistVisibleProcedures, acceptProcedure } from "../../../data/ProceduresService"
+
+// Improved converter function with proper type handling
+const convertToJob = (procedure: MedicalProcedure): Job => {
+  return {
+    ...procedure,
+    fee: procedure.fee ?? 0, // Default for fee
+    status: (procedure.status as JobStatus) ?? "available", // Cast and provide default
+    // Add any other required fields from Job type that might be missing in MedicalProcedure
+  };
+};
 
 export default function AvailableJobs() {
   const [refreshing, setRefreshing] = useState(false)
-  const [jobs, setJobs] = useState(mockAvailableJobs)
+  const [loading, setLoading] = useState(true)
+  const [jobs, setJobs] = useState<Job[]>([]) // Change back to Job[]
 
-  const onRefresh = () => {
+  useEffect(() => {
+    fetchJobs()
+  }, [])
+
+  const fetchJobs = async () => {
+    try {
+      setLoading(true)
+      const procedures = await getAnaesthetistVisibleProcedures()
+      
+      // Convert each procedure to a Job
+      const jobsData = procedures.map(convertToJob)
+      setJobs(jobsData)
+    } catch (error) {
+      console.error("Error fetching available jobs:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const onRefresh = async () => {
     setRefreshing(true)
-    // Simulate a refresh - in a real app, this would fetch fresh data
-    setTimeout(() => {
-      // Here you could use getJobsByStatus to simulate a new API call
-      const freshJobs = getJobsByStatus("available");
-      setJobs(freshJobs);
-      setRefreshing(false)
-    }, 1000)
+    await fetchJobs()
+    setRefreshing(false)
   }
 
   // Enhanced sorting logic to prioritize sequential jobs with deadlines
@@ -38,9 +64,19 @@ export default function AvailableJobs() {
     return 0;
   });
 
-  const handleAcceptJob = (jobId: string) => {
-    alert(`Job ${jobId} accepted! Waiting for clinic confirmation.`);
-    // In a real app, this would call an API to accept the job
+  const handleAcceptJob = async (jobId: string) => {
+    try {
+      setLoading(true)
+      await acceptProcedure(jobId)
+      // Remove accepted job from available jobs
+      setJobs(jobs.filter(job => job.id !== jobId))
+      alert(`Job accepted! Waiting for clinic confirmation.`)
+    } catch (error) {
+      console.error("Error accepting job:", error)
+      alert("Failed to accept job. Please try again.")
+    } finally {
+      setLoading(false)
+    }
   };
 
   return (
@@ -50,7 +86,9 @@ export default function AvailableJobs() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        {sortedJobs.length > 0 ? (
+        {loading ? (
+          <Text style={styles.loadingText}>Loading available jobs...</Text>
+        ) : sortedJobs.length > 0 ? (
           <>
             {sortedJobs.map((job) => (
               <JobCard 
@@ -100,6 +138,11 @@ const styles = StyleSheet.create({
     color: '#6B7280', // gray-500 equivalent
     fontSize: 14,
     marginTop: 8,
+  },
+  loadingText: {
+    textAlign: 'center',
+    marginTop: 40,
+    color: '#6B7280',
   }
-});
+})
 
