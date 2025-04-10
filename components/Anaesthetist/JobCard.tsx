@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Calendar, Clock, MapPin, DollarSign, User } from 'react-native-feather';
+import { Calendar, Clock, MapPin, DollarSign, User, AlertCircle, Clock as ClockTimer } from 'react-native-feather';
 
 export type JobStatus = 'available' | 'pending' | 'confirmed' | 'completed';
 
@@ -16,6 +16,22 @@ export interface Job {
   status: JobStatus;
   isPriority?: boolean;
   remarks?: string;
+  visibilityMode?: 'specific' | 'sequential' | 'timed' | 'all';
+  sequentialOfferDeadline?: string;
+  visibleToAllAfter?: string;
+}
+
+// Add a helper function to calculate time remaining
+const getTimeRemaining = (deadline: string): { hours: number, minutes: number, total: number } => {
+  const total = Date.parse(deadline) - Date.now();
+  const minutes = Math.floor((total / 1000 / 60) % 60);
+  const hours = Math.floor((total / (1000 * 60 * 60)));
+  
+  return {
+    total,
+    hours,
+    minutes
+  };
 }
 
 interface JobCardProps {
@@ -26,6 +42,34 @@ interface JobCardProps {
 }
 
 export default function JobCard({ job, onAccept, onCancel, onViewDetails }: JobCardProps) {
+  // Add state for timer
+  const [timeRemaining, setTimeRemaining] = useState<{ hours: number, minutes: number, total: number } | null>(null);
+  const [isExpired, setIsExpired] = useState(false);
+
+  // Set up timer effect
+  useEffect(() => {
+    // For sequential mode - countdown until offer expires
+    const deadlineToCheck = job.visibilityMode === 'sequential' ? 
+      job.sequentialOfferDeadline : 
+      job.visibilityMode === 'timed' ? job.visibleToAllAfter : null;
+
+    if (deadlineToCheck) {
+      const updateTimer = () => {
+        const remaining = getTimeRemaining(deadlineToCheck);
+        setTimeRemaining(remaining);
+        setIsExpired(remaining.total <= 0);
+      };
+
+      // Initial update
+      updateTimer();
+      
+      // Update timer every minute (changed from every second)
+      const timerInterval = setInterval(updateTimer, 60000);
+      
+      return () => clearInterval(timerInterval);
+    }
+  }, [job.sequentialOfferDeadline, job.visibleToAllAfter, job.visibilityMode]);
+
   const handleViewDetails = () => {
     if (onViewDetails) {
       onViewDetails(job.id);
@@ -35,11 +79,45 @@ export default function JobCard({ job, onAccept, onCancel, onViewDetails }: JobC
   return (
     <View style={[
       styles.cardContainer,
-      job.isPriority ? styles.priorityCard : null
+      job.isPriority ? styles.priorityCard : null,
+      job.visibilityMode === 'sequential' && styles.sequentialCard,
+      job.visibilityMode === 'timed' && styles.timedCard
     ]}>
-      {job.isPriority && (
-        <View style={styles.priorityBadge}>
-          <Text style={styles.priorityBadgeText}>Priority</Text>
+      {/* Timer Display for Sequential or Timed */}
+      {(job.visibilityMode === 'sequential' || job.visibilityMode === 'timed') && timeRemaining && (
+        <View style={[
+          styles.timerContainer,
+          job.visibilityMode === 'sequential' ? styles.sequentialTimerContainer : styles.timedTimerContainer
+        ]}>
+          {job.visibilityMode === 'sequential' ? (
+            <AlertCircle width={16} height={16} stroke="#ef4444" style={styles.timerIcon} />
+          ) : (
+            <ClockTimer width={16} height={16} stroke="#0369a1" style={styles.timerIcon} />
+          )}
+          <Text style={job.visibilityMode === 'sequential' ? styles.sequentialTimerText : styles.timedTimerText}>
+            {isExpired 
+              ? (job.visibilityMode === 'sequential' ? "Offer expired" : "Available to all anaesthetists")
+              : `${timeRemaining.hours > 0 ? `${timeRemaining.hours}h ` : ''}${timeRemaining.minutes}m ${job.visibilityMode === 'sequential' ? 'remaining' : 'until public'}`
+            }
+          </Text>
+        </View>
+      )}
+
+      {/* Priority/Status badge */}
+      {(job.isPriority || job.visibilityMode === 'sequential' || job.visibilityMode === 'timed') && (
+        <View style={[
+          styles.badgeContainer,
+          job.visibilityMode === 'sequential' ? styles.sequentialBadge : 
+          job.visibilityMode === 'timed' ? styles.timedBadge : styles.priorityBadge
+        ]}>
+          <Text style={[
+            styles.badgeText,
+            job.visibilityMode === 'sequential' ? styles.sequentialBadgeText :
+            job.visibilityMode === 'timed' ? styles.timedBadgeText : styles.priorityBadgeText
+          ]}>
+            {job.visibilityMode === 'sequential' ? "Personal Offer" : 
+             job.visibilityMode === 'timed' ? "Preferred Access" : "Priority"}
+          </Text>
         </View>
       )}
       
@@ -57,6 +135,7 @@ export default function JobCard({ job, onAccept, onCancel, onViewDetails }: JobC
         </View>
       </View>
       
+      {/* Rest of the card remains the same */}
       <View style={styles.detailsContainer}>
         <View style={styles.detailRow}>
           <Calendar width={16} height={16} stroke="#6B7280" style={styles.iconMarginRight} />
@@ -126,18 +205,69 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderLeftColor: '#4F46E5', // border-indigo-500
   },
-  priorityBadge: {
-    backgroundColor: '#EEF2FF', // bg-indigo-100
+  sequentialCard: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#ef4444', // red-500
+  },
+  timedCard: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#0369a1', // blue-600
+  },
+  badgeContainer: {
     borderRadius: 8, // rounded-lg
     paddingHorizontal: 8, // px-2
     paddingVertical: 4, // py-1
     marginBottom: 8, // mb-2
     alignSelf: 'flex-start', // self-start
   },
-  priorityBadgeText: {
-    color: '#4338CA', // text-indigo-700
+  priorityBadge: {
+    backgroundColor: '#EEF2FF', // bg-indigo-100
+  },
+  sequentialBadge: {
+    backgroundColor: '#FEF2F2', // bg-red-50
+  },
+  timedBadge: {
+    backgroundColor: '#EFF6FF', // bg-blue-50
+  },
+  badgeText: {
     fontSize: 12, // text-xs
     fontWeight: '500', // font-medium
+  },
+  priorityBadgeText: {
+    color: '#4338CA', // text-indigo-700
+  },
+  sequentialBadgeText: {
+    color: '#B91C1C', // text-red-700
+  },
+  timedBadgeText: {
+    color: '#1D4ED8', // text-blue-700
+  },
+  timerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    marginBottom: 8,
+  },
+  sequentialTimerContainer: {
+    backgroundColor: '#fef2f2', // red-50
+  },
+  timedTimerContainer: {
+    backgroundColor: '#f0f9ff', // blue-50
+  },
+  timerIcon: {
+    marginRight: 6,
+  },
+  sequentialTimerText: {
+    color: '#ef4444', // red-500
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  timedTimerText: {
+    color: '#0284c7', // blue-500
+    fontSize: 12,
+    fontWeight: '500',
   },
   headerRow: {
     flexDirection: 'row',

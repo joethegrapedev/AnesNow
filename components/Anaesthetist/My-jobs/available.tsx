@@ -18,17 +18,30 @@ export default function AvailableJobs() {
     }, 1000)
   }
 
-  // Sort jobs to show priority jobs first
+  // Enhanced sorting logic to prioritize sequential jobs with deadlines
   const sortedJobs = [...jobs].sort((a, b) => {
-    if (a.isPriority && !b.isPriority) return -1
-    if (!a.isPriority && b.isPriority) return 1
-    return 0
-  })
+    // First, prioritize sequential jobs
+    if (a.visibilityMode === 'sequential' && b.visibilityMode !== 'sequential') return -1;
+    if (a.visibilityMode !== 'sequential' && b.visibilityMode === 'sequential') return 1;
+    
+    // Then sort by priority
+    if (a.isPriority && !b.isPriority) return -1;
+    if (!a.isPriority && b.isPriority) return 1;
+    
+    // If both are sequential, sort by deadline (sooner deadlines first)
+    if (a.visibilityMode === 'sequential' && b.visibilityMode === 'sequential') {
+      if (a.sequentialOfferDeadline && b.sequentialOfferDeadline) {
+        return new Date(a.sequentialOfferDeadline).getTime() - new Date(b.sequentialOfferDeadline).getTime();
+      }
+    }
+    
+    return 0;
+  });
 
   const handleAcceptJob = (jobId: string) => {
-    alert(`Job ${jobId} accepted! Waiting for clinic confirmation.`)
+    alert(`Job ${jobId} accepted! Waiting for clinic confirmation.`);
     // In a real app, this would call an API to accept the job
-  }
+  };
 
   return (
     <View style={styles.container}>
@@ -51,12 +64,13 @@ export default function AvailableJobs() {
           </>
         ) : (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No available jobs found</Text>
+            <Text style={styles.emptyText}>No available jobs</Text>
+            <Text style={styles.emptyDescription}>Check back later for new opportunities</Text>
           </View>
         )}
       </ScrollView>
     </View>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
@@ -81,6 +95,11 @@ const styles = StyleSheet.create({
   emptyText: {
     color: '#6B7280', // gray-500 equivalent
     fontSize: 18,
+  },
+  emptyDescription: {
+    color: '#6B7280', // gray-500 equivalent
+    fontSize: 14,
+    marginTop: 8,
   }
 });
 
