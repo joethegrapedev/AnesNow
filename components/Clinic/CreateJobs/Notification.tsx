@@ -79,8 +79,7 @@ const Notification: React.FC<NotificationProps> = ({
   };
   
   // Don't render anything if not visible and fully hidden
-  if (!visible && opacity._value === 0) return null;
-  
+ 
   return (
     <Animated.View 
       style={[
