@@ -1,22 +1,27 @@
-import { View, Text, TouchableOpacity, Image, StyleSheet } from "react-native"
-import { Star, Check, X } from "react-native-feather"
-import type { UserData } from "../../data/mockData"
+import React from "react";
+import { View, Text, TouchableOpacity, Image, StyleSheet } from "react-native";
+import { Star, Check, X } from "react-native-feather";
+import { UserData } from "../../data/DataTypes"; // Adjust import path as needed
 
-type AnaesthetistCardProps = {
-  anaesthetist: UserData
-  isPreferred?: boolean
-  onSelect?: () => void
-  onRemove?: () => void
-  showActions?: boolean
+interface AnaesthetistCardProps {
+  anaesthetist: UserData;
+  showActions?: boolean;
+  actionButton?: React.ReactNode; // Add this to support custom action buttons
+  isPreferred?: boolean;
+  isConfirmed?: boolean; // Add this for the isConfirmed prop
+  onSelect?: () => void;
+  onRemove?: () => void;
 }
 
-export default function AnaesthetistCard({
+const AnaesthetistCard: React.FC<AnaesthetistCardProps> = ({
   anaesthetist,
+  showActions = true,
+  actionButton,
   isPreferred = false,
+  isConfirmed = false,
   onSelect,
   onRemove,
-  showActions = true,
-}: AnaesthetistCardProps) {
+}) => {
   return (
     <View style={styles.card}>
       <View style={styles.rowContainer}>
@@ -52,35 +57,48 @@ export default function AnaesthetistCard({
             </View>
           </View>
 
+          {/* Confirmed Badge */}
+          {isConfirmed && (
+            <View style={styles.confirmedBadge}>
+              <Text style={styles.confirmedText}>Confirmed</Text>
+            </View>
+          )}
+
           {/* Action Buttons */}
           {showActions && (
             <View style={styles.actionRow}>
-              {onSelect && (
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.selectButton]}
-                  onPress={onSelect}
-                >
-                  <Check width={16} height={16} stroke="#4F46E5" style={{marginRight: 4}} />
-                  <Text style={styles.selectButtonText}>Select</Text>
-                </TouchableOpacity>
-              )}
+              {actionButton ? (
+                actionButton
+              ) : (
+                <>
+                  {onSelect && (
+                    <TouchableOpacity
+                      style={[styles.actionButton, styles.selectButton]}
+                      onPress={onSelect}
+                    >
+                      <Check width={16} height={16} stroke="#4F46E5" style={{ marginRight: 4 }} />
+                      <Text style={styles.selectButtonText}>Select</Text>
+                    </TouchableOpacity>
+                  )}
 
-              {onRemove && (
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.removeButton]}
-                  onPress={onRemove}
-                >
-                  <X width={16} height={16} stroke="#6B7280" style={{marginRight: 4}} />
-                  <Text style={styles.removeButtonText}>Remove</Text>
-                </TouchableOpacity>
+                  {onRemove && (
+                    <TouchableOpacity
+                      style={[styles.actionButton, styles.removeButton]}
+                      onPress={onRemove}
+                    >
+                      <X width={16} height={16} stroke="#6B7280" style={{ marginRight: 4 }} />
+                      <Text style={styles.removeButtonText}>Remove</Text>
+                    </TouchableOpacity>
+                  )}
+                </>
               )}
             </View>
           )}
         </View>
       </View>
     </View>
-  )
-}
+  );
+};
 
 const styles = StyleSheet.create({
   card: {
@@ -94,7 +112,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: "#F3F4F6"
+    borderColor: "#F3F4F6",
   },
   rowContainer: {
     flexDirection: "row",
@@ -116,10 +134,10 @@ const styles = StyleSheet.create({
   name: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#1F2937"
+    color: "#1F2937",
   },
   specialization: {
-    color: "#6B7280"
+    color: "#6B7280",
   },
   preferredBadge: {
     backgroundColor: "#EEF2FF",
@@ -148,6 +166,18 @@ const styles = StyleSheet.create({
   ratingText: {
     color: "#6B7280",
     marginLeft: 4,
+  },
+  confirmedBadge: {
+    backgroundColor: "#D1FAE5",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 9999,
+    marginTop: 8,
+  },
+  confirmedText: {
+    color: "#065F46",
+    fontSize: 12,
+    fontWeight: "500",
   },
   actionRow: {
     flexDirection: "row",
@@ -178,3 +208,5 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
 });
+
+export default AnaesthetistCard;

@@ -1,97 +1,40 @@
-import { FieldValue } from 'firebase/firestore';
+/**
+ * @deprecated This file is being phased out. Import from DataTypes.tsx and DataService.tsx instead.
+ */
 
-// Define JobStatus directly
-export type JobStatus = 'available' | 'pending' | 'completed' | 'accepted' | 'confirmed' | 'cancelled';
+import { 
+  JobStatus, 
+  VisibilityMode, 
+  MedicalProcedure, 
+  UserData, 
+  Case, 
+  Job 
+} from './DataTypes';
 
-// Visibility mode options
-export type VisibilityMode = 'specific' | 'sequential' | 'timed' | 'all';
+import {
+  getJobsByStatus,
+  getJobsVisibleToUser,
+  getCurrentUserData,
+  isJobVisibleToUser
+} from './DataService';
 
-// Base type for all medical procedures
-export interface MedicalProcedure {
-  id: string;
-  date: string;
-  duration: string;
-  location: string;
-  surgeonName: string;
-  surgeryName: string;
-  remarks?: string;
-  fee?: number;  // Keeping as optional
-  startTime: string; // Add this property
-  
-  // New visibility system fields
-  visibilityMode?: VisibilityMode;  // Making optional for backward compatibility
-  preferredAnaesthetists?: string[];  // Array of user UIDs
-  autoAccept?: boolean;  // Whether to auto-confirm first respondent
-  acceptedBy?: string[];  // Array of anaesthetists who accepted
-  confirmedAnaesthetistId?: string;  // UID of confirmed anaesthetist
-  
-  // Fields for sequential offering
-  sequentialOfferIndex?: number;  // Current index in preferred list
-  sequentialOfferDeadline?: string;  // ISO timestamp when current offer expires
-  sequentialOfferDuration?: number;  // Minutes each anaesthetist has to respond
+// Re-export all types for backward compatibility
+export {
+  JobStatus,
+  VisibilityMode,
+  MedicalProcedure,
+  UserData,
+  Case,
+  Job,
+  getJobsByStatus,
+  getJobsVisibleToUser,
+  getCurrentUserData,
+  isJobVisibleToUser
+};
 
-  // Fields for timed visibility
-  timeDelayDays?: number;  // Days before showing to all
-  visibleToAllAfter?: string;  // ISO timestamp when job becomes visible to all
-  
-  // Timestamps - update these to accept FieldValue
-  createdAt?: string | FieldValue;  // ISO timestamp of creation
-  updatedAt?: string | FieldValue;  // ISO timestamp of last update
-  
-  // Other fields
-  status?: string;
-  isPriority?: boolean;
-}
-
-// User data interface for profile information
-export interface UserData {
-  uid: string;  // Firebase Auth UID
-  name: string;
-  email: string;
-  phone: string;
-  role?: 'anaesthetist' | 'clinic';
-  profileImage?: string;
-  
-  // Common fields
-  bio?: string;
-  isProfileComplete?: boolean;
-  createdAt?: string;
-  updatedAt?: string;
-  
-  // Anaesthetist-specific fields
-  specialization?: string;  // Keeping as optional as requested
-  experience?: string;
-  qualifications?: string[];
-  jobAcceptanceRate?: number;
-  completedJobs?: number;
-  
-  // Clinic-specific fields
-  clinicName?: string;
-  clinicAddress?: string;
-  clinicPhone?: string;
-  businessHours?: string;
-  postedJobs?: string[];  // Array of job IDs
-}
-
-// Case interface for Dashboard (subset of procedure data)
-export interface Case extends MedicalProcedure {
-  time: string;
-  isCancelled?: boolean;
-  isVisibleToCurrentUser?: boolean;  // Helper field for UI
-  isPreferred?: boolean;  // Helper to show if user is preferred
-}
-
-// Job interface for job listings (subset of procedure data)
-export interface Job extends MedicalProcedure {
-  startTime: string;
-  fee: number;
-  status: JobStatus;
-  isVisibleToCurrentUser?: boolean;  // Helper field for UI
-  isPreferred?: boolean;  // Helper to show if user is preferred
-  applicationDeadline?: string;  // For timed visibility mode
-}
-
-// Main data structure - mimics a Firestore collection
+// Keep your mock data object definitions for testing
+// But mark them deprecated
+/** @deprecated Use Firebase data instead */
 export const mockProcedures: Record<string, MedicalProcedure> = {
   "proc-001": {
     id: "proc-001",
@@ -272,7 +215,7 @@ export const mockProcedures: Record<string, MedicalProcedure> = {
   },
 };
 
-// Status mapping (mimics a separate Firestore collection or field)
+/** @deprecated Use Firebase data instead */
 export const procedureStatus: Record<string, { status: JobStatus, startTime: string }> = {
   "proc-001": { status: "available", startTime: "09:00 AM" },
   "proc-002": { status: "available", startTime: "11:30 AM" },
@@ -289,9 +232,7 @@ export const procedureStatus: Record<string, { status: JobStatus, startTime: str
   "proc-013": { status: "available", startTime: "13:30 PM" },
 };
 
-// Helper functions to transform data into the required formats
-
-// For Dashboard
+/** @deprecated Use Firebase data instead */
 export const mockCases: Case[] = Object.values(mockProcedures)
   .filter(proc => ["proc-001", "proc-002", "proc-003", "proc-004", "proc-005"].includes(proc.id))
   .map(proc => ({
@@ -300,7 +241,7 @@ export const mockCases: Case[] = Object.values(mockProcedures)
     isCancelled: false,
   })) as Case[];
 
-// For Jobs
+/** @deprecated Use Firebase data instead */
 export const mockAvailableJobs: Job[] = Object.values(mockProcedures)
   .filter(proc => procedureStatus[proc.id]?.status === "available")
   .map(proc => ({
@@ -310,6 +251,7 @@ export const mockAvailableJobs: Job[] = Object.values(mockProcedures)
     fee: proc.fee || 0,
   })) as Job[];
 
+/** @deprecated Use Firebase data instead */
 export const mockPendingJobs: Job[] = Object.values(mockProcedures)
   .filter(proc => procedureStatus[proc.id]?.status === "pending")
   .map(proc => ({
@@ -319,6 +261,7 @@ export const mockPendingJobs: Job[] = Object.values(mockProcedures)
     fee: proc.fee || 0,
   })) as Job[];
 
+/** @deprecated Use Firebase data instead */
 export const mockConfirmedJobs: Job[] = Object.values(mockProcedures)
   .filter(proc => procedureStatus[proc.id]?.status === "confirmed")
   .map(proc => ({
@@ -328,19 +271,7 @@ export const mockConfirmedJobs: Job[] = Object.values(mockProcedures)
     fee: proc.fee || 0,
   })) as Job[];
 
-// Helper function to get jobs by status - useful when converting to Firestore
-export function getJobsByStatus(status: JobStatus): Job[] {
-  return Object.values(mockProcedures)
-    .filter(proc => procedureStatus[proc.id]?.status === status)
-    .map(proc => ({
-      ...proc,
-      startTime: procedureStatus[proc.id].startTime,
-      status: procedureStatus[proc.id].status,
-      fee: proc.fee || 0,
-    })) as Job[];
-}
-
-// Mock user data - mimics user collection in Firestore
+/** @deprecated Use Firebase data instead */
 export const mockUsers: Record<string, UserData> = {
   "user-001": {
     uid: "user-001",
@@ -393,65 +324,3 @@ export const mockUsers: Record<string, UserData> = {
     updatedAt: new Date(2024, 1, 15).toISOString()
   }
 };
-
-// Helper function to get current user data
-// In a real app, this would check authentication state
-export function getCurrentUserData(): UserData {
-  // Return the first user as default
-  return mockUsers["user-001"];
-}
-
-// Helper function to check if a job should be visible to a specific user
-export function isJobVisibleToUser(job: MedicalProcedure, userId: string): boolean {
-  // Default to true if no visibility mode is set (for backward compatibility)
-  if (!job.visibilityMode) return true;
-  
-  // If job has a confirmed anaesthetist, only visible to that person
-  if (job.confirmedAnaesthetistId) {
-    return job.confirmedAnaesthetistId === userId;
-  }
-  
-  switch (job.visibilityMode) {
-    case 'specific':
-      return job.preferredAnaesthetists?.includes(userId) || false;
-      
-    case 'sequential':
-      // Only visible to the current anaesthetist in sequence
-      const currentIndex = job.sequentialOfferIndex || 0;
-      return job.preferredAnaesthetists?.[currentIndex] === userId;
-      
-    case 'timed':
-      // Visible to preferred anaesthetists immediately
-      if (job.preferredAnaesthetists?.includes(userId)) {
-        return true;
-      }
-      
-      // Check if past the visibility window
-      if (job.visibleToAllAfter) {
-        const now = new Date().toISOString();
-        return now >= job.visibleToAllAfter;
-      }
-      
-      return false;
-      
-    case 'all':
-      return true;
-      
-    default:
-      return true;
-  }
-}
-
-// Helper function to get visible jobs for a user (to replace in your existing functions)
-export function getJobsVisibleToUser(userId: string): Job[] {
-  return Object.values(mockProcedures)
-    .filter(job => isJobVisibleToUser(job, userId))
-    .map(proc => ({
-      ...proc,
-      startTime: procedureStatus[proc.id]?.startTime || "",
-      status: procedureStatus[proc.id]?.status || "available",
-      fee: proc.fee || 0,
-      isVisibleToCurrentUser: true,
-      isPreferred: proc.preferredAnaesthetists?.includes(userId) || false
-    })) as Job[];
-}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { 
   View, 
   Text, 
@@ -14,20 +14,26 @@ import {
 import { Calendar, Search, Filter } from "react-native-feather"
 import { router } from "expo-router"
 import JobCard from "../../components/Clinic/ClinicJobCard"
-import { MedicalProcedure, Job } from "../../data/mockData" // Make sure to import Job type
+import { MedicalProcedure, Job, JobStatus } from "../../data/DataTypes"
 import { 
   getClinicProcedures,
-  getProceduresByStatus 
+  getProceduresByStatus
 } from "../../data/ProceduresService"
+import { clearCache } from "../../data/DataService"
+import { testFirebaseConnection } from "../../data/ProceduresService"
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '../../FirebaseConfig';
 
-// Add this conversion function to handle the type differences
 function convertProcedureToJob(procedure: MedicalProcedure): Job {
   return {
     ...procedure,
-    fee: procedure.fee ?? 0, // Provide default for optional fee
-    // Add defaults for any other required fields in the Job type
+    fee: procedure.fee ?? 0,
+    startTime: procedure.startTime || '',
+    status: procedure.status as JobStatus || 'available',
+    isVisibleToCurrentUser: true
   } as Job;
 }
+
 
 export default function ClinicDashboardScreen() {
   const [selectedStatus, setSelectedStatus] = useState<string>("all")
@@ -35,46 +41,102 @@ export default function ClinicDashboardScreen() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [procedures, setProcedures] = useState<MedicalProcedure[]>([])
+  const [error, setError] = useState<string | null>(null)
 
-  // Fetch procedures on component mount
-  useEffect(() => {
-    fetchProcedures()
-  }, [])
-
-  const fetchProcedures = async () => {
+  const fetchProcedures = useCallback(async (forceRefresh: boolean = false) => {
     try {
       setLoading(true)
-      const clinicProcedures = await getClinicProcedures()
-      setProcedures(clinicProcedures)
+      setError(null)
+      
+      if (forceRefresh) {
+        clearCache();
+      }
+      
+      let clinicProcedures: MedicalProcedure[] = [];
+      
+      console.log(`Fetching procedures with status filter: ${selectedStatus}`);
+      
+      // Map UI status to JobStatus type
+      const statusMap: Record<string, JobStatus> = {
+        "all": "all" as any, // special case - handled differently
+        "available": "available",
+        "pending": "pending",
+        "accepted": "accepted",
+        "confirmed": "confirmed",
+        "cancelled": "cancelled"
+      };
+      
+      // Get properly typed status from map
+      const mappedStatus = statusMap[selectedStatus];
+      
+      try {
+        if (selectedStatus !== "all") {
+          console.log(`Calling getProceduresByStatus with: ${mappedStatus}`);
+          clinicProcedures = await getProceduresByStatus(mappedStatus);
+        } else {
+          console.log('Calling getClinicProcedures');
+          clinicProcedures = await getClinicProcedures();
+        }
+        
+        console.log(`Retrieved ${clinicProcedures.length} procedures`);
+        
+        // Log the first procedure to help with debugging
+        if (clinicProcedures.length > 0) {
+          console.log('First procedure sample:', JSON.stringify({
+            id: clinicProcedures[0].id,
+            surgeryName: clinicProcedures[0].surgeryName,
+            status: clinicProcedures[0].status
+          }));
+        }
+        
+        clinicProcedures.sort((a, b) => {
+          const dateA = new Date(a.date).getTime();
+          const dateB = new Date(b.date).getTime();
+          return dateB - dateA;
+        });
+        
+        setProcedures(clinicProcedures)
+      } catch (queryError) {
+        console.error("Error in specific query:", queryError);
+        throw queryError;
+      }
     } catch (error) {
-      console.error("Error fetching procedures:", error)
-      Alert.alert("Error", "Failed to load jobs. Please try again.")
+      console.error("Error fetching procedures:", error);
+      
+      // Better error message
+      let errorMessage = "Failed to load jobs. Please try again.";
+      if (error instanceof Error) {
+        errorMessage += ` (${error.message})`;
+      }
+      
+      setError(errorMessage);
+      Alert.alert("Error", errorMessage);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  }, [selectedStatus]);
 
-  // Handle pull-to-refresh
-  const onRefresh = async () => {
+  useEffect(() => {
+    fetchProcedures()
+  }, [fetchProcedures])
+
+  useEffect(() => {
+    fetchProcedures()
+  }, [selectedStatus, fetchProcedures])
+
+  const onRefresh = useCallback(async () => {
     setRefreshing(true)
     try {
-      await fetchProcedures()
+      await fetchProcedures(true)
     } catch (error) {
       console.error("Error refreshing procedures:", error)
     } finally {
       setRefreshing(false)
     }
-  }
+  }, [fetchProcedures])
 
-  // Search functionality
-  const handleSearch = (text: string) => {
-    setSearchQuery(text)
-  }
-
-  // Apply search filter and status filter
   const filteredProcedures = procedures
     .filter(proc => {
-      // First apply search filter if query exists
       if (searchQuery) {
         const query = searchQuery.toLowerCase()
         return (
@@ -85,18 +147,13 @@ export default function ClinicDashboardScreen() {
       }
       return true
     })
-    .filter(proc => {
-      // Then apply status filter
-      return selectedStatus === "all" ? true : proc.status === selectedStatus
-    })
 
   const handleJobPress = (jobId: string) => {
     router.push(`/(Clinic)/job-details/${jobId}`)
   }
 
-  // Get counts for dashboard stats
-  const getStatusCounts = () => {
-    const counts = {
+  const getStatusCounts = useCallback(() => {
+    return {
       total: procedures.length,
       open: procedures.filter(proc => proc.status === "available").length,
       pending: procedures.filter(proc => proc.status === "pending").length,
@@ -104,18 +161,14 @@ export default function ClinicDashboardScreen() {
       confirmed: procedures.filter(proc => proc.status === "confirmed").length,
       cancelled: procedures.filter(proc => proc.status === "cancelled").length,
     }
-
-    return counts
-  }
+  }, [procedures])
 
   const statusCounts = getStatusCounts()
 
-  // Get today's date for the greeting
   const today = new Date()
   const options: Intl.DateTimeFormatOptions = { weekday: "long", month: "long", day: "numeric" }
   const formattedDate = today.toLocaleDateString("en-US", options)
 
-  // Define status categories for filter buttons
   const statusCategories = [
     { id: "all", label: "All", count: statusCounts.total },
     { id: "available", label: "Open", count: statusCounts.open },
@@ -125,9 +178,12 @@ export default function ClinicDashboardScreen() {
     { id: "cancelled", label: "Cancelled", count: statusCounts.cancelled }
   ];
 
+  const handleCreateJobPress = () => {
+    router.push("/(Clinic)/CreateJobs")
+  }
+
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTitleRow}>
           <View>
@@ -137,7 +193,6 @@ export default function ClinicDashboardScreen() {
           <Text style={styles.dateText}>{formattedDate}</Text>
         </View>
 
-        {/* Stats Cards */}
         <ScrollView 
           horizontal 
           showsHorizontalScrollIndicator={false} 
@@ -165,7 +220,6 @@ export default function ClinicDashboardScreen() {
         </ScrollView>
       </View>
 
-      {/* Search Bar */}
       <View style={styles.searchContainer}>
         <View style={styles.searchBar}>
           <Search width={18} height={18} stroke="#6B7280" />
@@ -174,12 +228,11 @@ export default function ClinicDashboardScreen() {
             placeholder="Search jobs..."
             placeholderTextColor="#6B7280"
             value={searchQuery}
-            onChangeText={handleSearch}
+            onChangeText={setSearchQuery}
           />
         </View>
       </View>
 
-      {/* Enhanced Status Filter - Square Buttons */}
       <View style={styles.statusFilterContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           {statusCategories.map((category) => (
@@ -190,6 +243,9 @@ export default function ClinicDashboardScreen() {
                 selectedStatus === category.id && getStatusButtonStyle(category.id)
               ]}
               onPress={() => setSelectedStatus(category.id)}
+              accessibilityLabel={`Filter by ${category.label} jobs`}
+              accessibilityRole="button"
+              accessibilityState={{ selected: selectedStatus === category.id }}
             >
               <Text 
                 style={[
@@ -212,18 +268,37 @@ export default function ClinicDashboardScreen() {
         </ScrollView>
       </View>
 
-      {/* Job List */}
       <ScrollView 
         style={styles.jobsScrollView}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
+        {__DEV__ && (
+          <TouchableOpacity 
+            style={styles.debugButton}
+            onPress={async () => {
+              try {
+                const testResult = await testFirebaseConnection();
+                Alert.alert("Test Result", `Firebase connection test: ${testResult ? 'SUCCESS' : 'FAILED'}`);
+              } catch (e) {
+                Alert.alert("Error", `Test failed: ${e instanceof Error ? e.message : String(e)}`);
+              }
+            }}
+          >
+            <Text style={styles.debugButtonText}>Test Connection</Text>
+          </TouchableOpacity>
+        )}
+
         <View style={styles.jobsHeader}>
           <Text style={styles.jobsCount}>
             {filteredProcedures.length} Job{filteredProcedures.length !== 1 ? "s" : ""}
           </Text>
-          <TouchableOpacity style={styles.filterButton}>
+          <TouchableOpacity 
+            style={styles.filterButton}
+            accessibilityLabel="More filters"
+            accessibilityRole="button"
+          >
             <Filter width={16} height={16} stroke="#6B7280" style={styles.filterIcon} />
             <Text style={styles.filterText}>More Filters</Text>
           </TouchableOpacity>
@@ -231,11 +306,23 @@ export default function ClinicDashboardScreen() {
 
         {loading ? (
           <ActivityIndicator size="large" color="#4F46E5" style={styles.loader} />
+        ) : error ? (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity 
+              style={styles.retryButton}
+              onPress={() => fetchProcedures(true)}
+              accessibilityLabel="Retry loading jobs"
+              accessibilityRole="button"
+            >
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
         ) : filteredProcedures.length > 0 ? (
           filteredProcedures.map((proc) => (
             <JobCard 
               key={proc.id} 
-              job={convertProcedureToJob(proc)} // Convert the type here
+              job={convertProcedureToJob(proc)}
               onPress={() => handleJobPress(proc.id)} 
               showApplicationCount={true} 
             />
@@ -253,7 +340,9 @@ export default function ClinicDashboardScreen() {
             </Text>
             <TouchableOpacity
               style={styles.createJobButton}
-              onPress={() => router.push("/(Clinic)/CreateJobs")}
+              onPress={handleCreateJobPress}
+              accessibilityLabel="Create new job"
+              accessibilityRole="button"
             >
               <Text style={styles.createJobButtonText}>Create New Job</Text>
             </TouchableOpacity>
@@ -261,11 +350,19 @@ export default function ClinicDashboardScreen() {
         )}
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={handleCreateJobPress}
+        accessibilityLabel="Create new job"
+        accessibilityRole="button"
+      >
+        <Text style={styles.fabText}>+</Text>
+      </TouchableOpacity>
     </SafeAreaView>
   )
 }
 
-// Helper function to get button style based on status
 function getStatusButtonStyle(status: string): any {
   switch (status) {
     case "all": return styles.allButtonActive;
@@ -278,7 +375,6 @@ function getStatusButtonStyle(status: string): any {
   }
 }
 
-// Helper function to get text style based on status
 function getStatusTextStyle(status: string): any {
   switch (status) {
     case "all": return styles.allTextActive;
@@ -294,118 +390,113 @@ function getStatusTextStyle(status: string): any {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB', // bg-gray-50
+    backgroundColor: '#F9FAFB',
   },
   header: {
-    backgroundColor: '#4F46E5', // bg-indigo-600
-    paddingHorizontal: 16, // px-4
-    paddingTop: 16, // pt-4
-    paddingBottom: 24, // pb-6
+    backgroundColor: '#4F46E5',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 24,
   },
   headerTitleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16, // mb-4
+    marginBottom: 16,
   },
   headerSubtitle: {
-    color: '#C7D2FE', // text-indigo-100
-    fontSize: 14, // text-sm
+    color: '#C7D2FE',
+    fontSize: 14,
   },
   headerTitle: {
-    color: '#FFFFFF', // text-white
-    fontSize: 20, // text-xl
-    fontWeight: '700', // font-bold
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '700',
   },
   dateText: {
-    color: '#A5B4FC', // text-indigo-200
+    color: '#A5B4FC',
   },
   statsScrollView: {
-    marginBottom: 8, // mb-2
+    marginBottom: 8,
   },
   statsCard: {
-    backgroundColor: '#FFFFFF', // bg-white
-    borderRadius: 12, // rounded-xl
-    padding: 12, // p-3
-    marginRight: 12, // mr-3
-    width: 128, // w-32
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 12,
+    marginRight: 12,
+    width: 128,
   },
   blueCard: {
-    backgroundColor: '#EFF6FF', // bg-blue-50
+    backgroundColor: '#EFF6FF',
   },
   yellowCard: {
-    backgroundColor: '#FFFBEB', // bg-yellow-50
+    backgroundColor: '#FFFBEB',
   },
   greenCard: {
-    backgroundColor: '#ECFDF5', // bg-green-50
+    backgroundColor: '#ECFDF5',
   },
   statsCardLabel: {
-    color: '#6B7280', // text-gray-500
-    fontSize: 12, // text-xs
-    marginBottom: 4, // mb-1
+    color: '#6B7280',
+    fontSize: 12,
+    marginBottom: 4,
   },
   statsCardValue: {
-    color: '#1F2937', // text-gray-800
-    fontSize: 20, // text-xl
-    fontWeight: '700', // font-bold
+    color: '#1F2937',
+    fontSize: 20,
+    fontWeight: '700',
   },
   blueCardLabel: {
-    color: '#3B82F6', // text-blue-500
-    fontSize: 12, // text-xs
-    marginBottom: 4, // mb-1
+    color: '#3B82F6',
+    fontSize: 12,
+    marginBottom: 4,
   },
   blueCardValue: {
-    color: '#1E40AF', // text-blue-800
-    fontSize: 20, // text-xl
-    fontWeight: '700', // font-bold
+    color: '#1E40AF',
+    fontSize: 20,
+    fontWeight: '700',
   },
   yellowCardLabel: {
-    color: '#F59E0B', // text-yellow-500
-    fontSize: 12, // text-xs
-    marginBottom: 4, // mb-1
+    color: '#F59E0B',
+    fontSize: 12,
+    marginBottom: 4,
   },
   yellowCardValue: {
-    color: '#92400E', // text-yellow-800
-    fontSize: 20, // text-xl
-    fontWeight: '700', // font-bold
+    color: '#92400E',
+    fontSize: 20,
+    fontWeight: '700',
   },
   greenCardLabel: {
-    color: '#10B981', // text-green-500
-    fontSize: 12, // text-xs
-    marginBottom: 4, // mb-1
+    color: '#10B981',
+    fontSize: 12,
+    marginBottom: 4,
   },
   greenCardValue: {
-    color: '#065F46', // text-green-800
-    fontSize: 20, // text-xl
-    fontWeight: '700', // font-bold
+    color: '#065F46',
+    fontSize: 20,
+    fontWeight: '700',
   },
   searchContainer: {
-    paddingHorizontal: 16, // px-4
-    paddingVertical: 12, // py-3
-    backgroundColor: '#FFFFFF', // bg-white
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB', // border-b border-gray-200
+    borderBottomColor: '#E5E7EB',
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6', // bg-gray-100
-    borderRadius: 8, // rounded-lg
-    paddingHorizontal: 12, // px-3
-    paddingVertical: 10, // py-2.5
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   searchInput: {
     flex: 1,
-    marginLeft: 8, // ml-2
-    color: '#1F2937', // text-gray-800
+    marginLeft: 8,
+    color: '#1F2937',
     fontSize: 16,
-    padding: 0, // Remove default padding
+    padding: 0,
   },
-  searchPlaceholder: {
-    marginLeft: 8, // ml-2
-    color: '#6B7280', // text-gray-500
-  },
-  // New Status Filter Styles
   statusFilterContainer: {
     backgroundColor: '#FFFFFF',
     paddingVertical: 12,
@@ -439,58 +530,56 @@ const styles = StyleSheet.create({
     fontSize: 18,
     marginTop: 4,
   },
-  // Active button styles
   allButtonActive: {
-    backgroundColor: '#E0E7FF', // indigo-100
+    backgroundColor: '#E0E7FF',
   },
   openButtonActive: {
-    backgroundColor: '#EFF6FF', // blue-50
+    backgroundColor: '#EFF6FF',
   },
   pendingButtonActive: {
-    backgroundColor: '#FFFBEB', // yellow-50
+    backgroundColor: '#FFFBEB',
   },
   acceptedButtonActive: {
-    backgroundColor: '#F0FDF4', // green-50
+    backgroundColor: '#F0FDF4',
   },
   confirmedButtonActive: {
-    backgroundColor: '#ECFDF5', // green-100
+    backgroundColor: '#ECFDF5',
   },
   cancelledButtonActive: {
-    backgroundColor: '#FEF2F2', // red-50
+    backgroundColor: '#FEF2F2',
   },
-  // Active text styles
   allTextActive: {
-    color: '#4338CA', // indigo-700
+    color: '#4338CA',
   },
   openTextActive: {
-    color: '#1D4ED8', // blue-700
+    color: '#1D4ED8',
   },
   pendingTextActive: {
-    color: '#B45309', // yellow-700
+    color: '#B45309',
   },
   acceptedTextActive: {
-    color: '#047857', // green-700
+    color: '#047857',
   },
   confirmedTextActive: {
-    color: '#047857', // green-700
+    color: '#047857',
   },
   cancelledTextActive: {
-    color: '#B91C1C', // red-700
+    color: '#B91C1C',
   },
   jobsScrollView: {
     flex: 1,
-    paddingHorizontal: 16, // px-4
-    paddingTop: 16, // pt-4
+    paddingHorizontal: 16,
+    paddingTop: 16,
   },
   jobsHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16, // mb-4
+    marginBottom: 16,
   },
   jobsCount: {
-    color: '#1F2937', // text-gray-800
-    fontWeight: '600', // font-semibold
+    color: '#1F2937',
+    fontWeight: '600',
   },
   filterButton: {
     flexDirection: 'row',
@@ -501,47 +590,98 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   filterIcon: {
-    marginRight: 4, // mr-1
+    marginRight: 4,
   },
   filterText: {
-    color: '#4B5563', // text-gray-600
+    color: '#4B5563',
   },
   emptyStateContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 80, // py-20
+    paddingVertical: 80,
   },
   emptyStateIcon: {
-    marginBottom: 16, // mb-4
+    marginBottom: 16,
     opacity: 0.5,
   },
   emptyStateTitle: {
-    color: '#374151', // text-gray-700
-    fontSize: 18, // text-lg
-    fontWeight: '500', // font-medium
+    color: '#374151',
+    fontSize: 18,
+    fontWeight: '500',
   },
   emptyStateDescription: {
-    color: '#6B7280', // text-gray-500
-    marginTop: 4, // mt-1
+    color: '#6B7280',
+    marginTop: 4,
     textAlign: 'center',
-    maxWidth: 300, // max-w-xs
+    maxWidth: 300,
   },
   createJobButton: {
-    marginTop: 24, // mt-6
-    backgroundColor: '#6366F1', // bg-indigo-500
-    paddingHorizontal: 16, // px-4
-    paddingVertical: 8, // py-2
-    borderRadius: 8, // rounded-lg
+    marginTop: 24,
+    backgroundColor: '#6366F1',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
   },
   createJobButtonText: {
-    color: '#FFFFFF', // text-white
-    fontWeight: '500', // font-medium
+    color: '#FFFFFF',
+    fontWeight: '500',
   },
   bottomSpacer: {
-    height: 16, // h-4
+    height: 16,
   },
   loader: {
     marginTop: 40,
+  },
+  fab: {
+    position: 'absolute',
+    width: 56,
+    height: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+    right: 20,
+    bottom: 20,
+    backgroundColor: '#4F46E5',
+    borderRadius: 28,
+    elevation: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  fabText: {
+    fontSize: 30,
+    color: 'white'
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 80,
+  },
+  errorText: {
+    color: '#B91C1C',
+    marginBottom: 16,
+    textAlign: 'center'
+  },
+  retryButton: {
+    backgroundColor: '#4F46E5',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '500',
+  },
+  debugButton: {
+    backgroundColor: '#4F46E5',
+    padding: 8,
+    marginBottom: 8,
+    borderRadius: 4,
+  },
+  debugButtonText: {
+    color: '#FFFFFF',
+    textAlign: 'center',
   },
 });

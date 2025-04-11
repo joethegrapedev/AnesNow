@@ -1,7 +1,7 @@
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native"
 import { Calendar, Clock, MapPin, User, DollarSign, AlertCircle, Users } from "react-native-feather"
-import { Job } from "../../data/mockData"
-import { JobStatus } from "../Anaesthetist/JobCard"  // Import JobStatus from where it's exported
+// Update import path
+import { Job, JobStatus } from "../../data/DataTypes"
 
 type JobCardProps = {
   job: Job

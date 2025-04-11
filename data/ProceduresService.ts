@@ -2,7 +2,6 @@ import { db, auth } from "../FirebaseConfig";
 import { 
   collection, 
   doc, 
-  setDoc, 
   addDoc, 
   updateDoc, 
   deleteDoc, 
@@ -11,126 +10,167 @@ import {
   query, 
   where, 
   serverTimestamp,
-  Timestamp,
   orderBy,
   limit,
-  FieldValue
+  FieldValue,
+  QueryDocumentSnapshot,
+  DocumentData
 } from "firebase/firestore";
-import { MedicalProcedure, JobStatus } from "../data/mockData";
+import { MedicalProcedure, JobStatus, VisibilityMode } from "./DataTypes";
 
-// Interface for procedure with Firebase-specific fields
-export interface FirebaseProcedure extends Omit<MedicalProcedure, 'createdAt' | 'updatedAt'> {
+// Define FirebaseProcedure interface for better Firestore integration
+export interface FirebaseProcedure {
+  id: string;
+  date: string;
+  duration: string;
+  location: string;
+  surgeonName: string;
+  surgeryName: string;
+  remarks?: string;
+  fee?: number;
+  startTime: string;
+  
+  // Visibility system fields
+  visibilityMode?: VisibilityMode;
+  preferredAnaesthetists?: string[];
+  autoAccept?: boolean;
+  acceptedBy?: string[];
+  confirmedAnaesthetistId?: string;
+  
+  // Fields for sequential offering
+  sequentialOfferIndex?: number;
+  sequentialOfferDeadline?: string;
+  sequentialOfferDuration?: number;
+  
+  // Fields for timed visibility
+  timeDelayDays?: number;
+  visibleToAllAfter?: string;
+  
+  // Firestore specific fields
   createdAt: FieldValue | null;
   updatedAt: FieldValue | null;
   postedBy: string;
+  status: JobStatus;
+}
+
+// Enhanced converter function with better error handling and debugging
+export function convertFirestoreDocToMedicalProcedure(
+  doc: QueryDocumentSnapshot<DocumentData>
+): MedicalProcedure {
+  try {
+    const data = doc.data();
+    
+    // Handle Firestore timestamp conversion
+    let createdAt: string | undefined = undefined;
+    let updatedAt: string | undefined = undefined;
+    
+    if (data.createdAt && typeof data.createdAt.toDate === 'function') {
+      createdAt = data.createdAt.toDate().toISOString();
+    }
+    
+    if (data.updatedAt && typeof data.updatedAt.toDate === 'function') {
+      updatedAt = data.updatedAt.toDate().toISOString();
+    }
+    
+    // Ensure status is always defined and valid
+    let status = data.status || 'available';
+    
+    // Validate status is a valid JobStatus
+    const validStatuses = ['available', 'pending', 'accepted', 'confirmed', 'cancelled'];
+    if (!validStatuses.includes(status)) {
+      console.warn(`Invalid status '${status}' found in document ${doc.id}, defaulting to 'available'`);
+      status = 'available';
+    }
+    
+    const procedure: MedicalProcedure = {
+      id: doc.id,
+      ...data,
+      createdAt,
+      updatedAt,
+      status
+    } as MedicalProcedure;
+    
+    return procedure;
+  } catch (error) {
+    console.error(`Error converting document ${doc.id}:`, error);
+    throw error;
+  }
 }
 
 // This function logs the current structure to help debug
 export async function debugFirebaseConnection() {
   try {
-    console.log("Checking Firebase connection...");
-    const proceduresRef = collection(db, "procedures");
-    console.log("Collection reference created:", proceduresRef);
+    const proceduresCollection = collection(db, "procedures");
+    console.log("Procedures collection reference:", proceduresCollection);
     
-    const testQuery = query(proceduresRef, limit(1));
-    const snapshot = await getDocs(testQuery);
-    console.log("Query executed, documents found:", snapshot.size);
+    const snapshot = await getDocs(proceduresCollection);
+    console.log("Number of procedures:", snapshot.size);
     
-    return true;
-  } catch (error) {
-    console.error("Firebase connection test failed:", error);
-    return false;
-  }
-}
-
-// Test Firebase connection
-export async function testFirebaseConnection(): Promise<boolean> {
-  try {
-    console.log("Testing Firebase connection...");
-    
-    // Check auth status
-    const user = auth.currentUser;
-    console.log("Current auth user:", user ? user.uid : "Not authenticated");
-    
-    // Try a simple collection query
-    const testQuery = query(collection(db, "test_docs"), limit(1));
-    const testSnapshot = await getDocs(testQuery);
-    console.log("Test query successful, doc count:", testSnapshot.size);
-    
-    return true;
-  } catch (error) {
-    console.error("Firebase connection test failed:", error);
-    return false;
-  }
-}
-
-// Create a new procedure with complete error handling and logging
-export async function createProcedure(procedureData: Partial<MedicalProcedure>): Promise<string> {
-  try {
-    // Check authentication first
-    if (!auth.currentUser) {
-      console.error("CREATE PROCEDURE: User not authenticated");
-      throw new Error("You must be signed in to create a procedure");
-    }
-    
-    console.log("CREATE PROCEDURE: Authenticated as", auth.currentUser.uid);
-    
-    // Create a clean object for Firestore
-    const safeData: Record<string, any> = {};
-    
-    // Copy all original data, converting any complex objects to string
-    Object.entries(procedureData).forEach(([key, value]) => {
-      // Skip null/undefined values
-      if (value === null || value === undefined) return;
-      
-      // Safe conversion for Firestore
-      if (value instanceof Date) {
-        safeData[key] = value.toISOString();
-      } else if (typeof value === 'object' && !Array.isArray(value)) {
-        safeData[key] = JSON.stringify(value);
-      } else {
-        safeData[key] = value;
-      }
+    snapshot.forEach(doc => {
+      console.log("Document ID:", doc.id);
+      console.log("Document data:", doc.data());
     });
     
-    // Add required fields
-    const procedureToCreate = {
-      ...safeData,
-      postedBy: auth.currentUser.uid,
-      status: "available" as JobStatus,
-      acceptedBy: [],
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    };
-    
-    console.log("CREATE PROCEDURE: Prepared document:", procedureToCreate);
-    
-    try {
-      // Force collection path to ensure it exists
-      const proceduresCollectionRef = collection(db, "procedures");
-      console.log("CREATE PROCEDURE: Got collection ref");
-      
-      // Add the document
-      const docRef = await addDoc(proceduresCollectionRef, procedureToCreate);
-      const procedureId = docRef.id;
-      console.log("CREATE PROCEDURE: Created document with ID:", procedureId);
-      
-      // Update with ID
-      await updateDoc(doc(db, "procedures", procedureId), { id: procedureId });
-      console.log("CREATE PROCEDURE: Updated document with its ID");
-      
-      return procedureId;
-    } catch (firestoreError) {
-      console.error("CREATE PROCEDURE: Firestore error:", firestoreError);
-      throw firestoreError;
-    }
+    return "Debug complete";
   } catch (error) {
-    console.error("CREATE PROCEDURE: General error:", error);
+    console.error("Debug failed:", error);
     throw error;
   }
 }
 
-// Fetch all procedures
+// Test Firebase connection
+export const testFirebaseConnection = async (): Promise<boolean> => {
+  try {
+    // Test connectivity to Firestore
+    const testDoc = await getDocs(collection(db, "procedures"));
+    console.log("Connection test success, found", testDoc.size, "documents");
+    return true;
+  } catch (error) {
+    console.error("Firebase connection test failed:", error);
+    return false;
+  }
+};
+
+// Create a new procedure
+export async function createProcedure(
+  procedureData: Partial<MedicalProcedure>
+): Promise<string> {
+  try {
+    const user = auth.currentUser;
+    if (!user) throw new Error("User not authenticated");
+    
+    // Validate required fields
+    if (!procedureData.surgeryName || !procedureData.date || !procedureData.startTime) {
+      throw new Error("Missing required job information");
+    }
+    
+    const newProcedureData = {
+      ...procedureData,
+      status: "available" as JobStatus,
+      acceptedBy: procedureData.acceptedBy || [],
+      preferredAnaesthetists: procedureData.preferredAnaesthetists || [],
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      postedBy: user.uid
+    };
+    
+    // Add to Firestore and get auto-generated ID
+    const docRef = await addDoc(collection(db, "procedures"), newProcedureData);
+    const generatedId = docRef.id;
+    
+    // Update the document with its ID
+    await updateDoc(doc(db, "procedures", docRef.id), {
+      id: generatedId
+    });
+    
+    return generatedId;
+  } catch (error) {
+    console.error("Error creating procedure:", error);
+    throw error;
+  }
+}
+
+// Updated function with proper conversion
 export async function getAllProcedures(): Promise<MedicalProcedure[]> {
   try {
     const proceduresQuery = query(
@@ -139,10 +179,7 @@ export async function getAllProcedures(): Promise<MedicalProcedure[]> {
     );
     
     const snapshot = await getDocs(proceduresQuery);
-    return snapshot.docs.map(doc => ({
-      ...doc.data(),
-      id: doc.id
-    })) as MedicalProcedure[];
+    return snapshot.docs.map(doc => convertFirestoreDocToMedicalProcedure(doc));
   } catch (error) {
     console.error("Error fetching procedures:", error);
     throw error;
@@ -155,7 +192,7 @@ export async function getProcedureById(procedureId: string): Promise<MedicalProc
     const procedureDoc = await getDoc(doc(db, "procedures", procedureId));
     
     if (procedureDoc.exists()) {
-      return { id: procedureDoc.id, ...procedureDoc.data() } as MedicalProcedure;
+      return convertFirestoreDocToMedicalProcedure(procedureDoc as QueryDocumentSnapshot<DocumentData>);
     } else {
       return null;
     }
@@ -168,16 +205,35 @@ export async function getProcedureById(procedureId: string): Promise<MedicalProc
 // Get procedures by status
 export async function getProceduresByStatus(status: JobStatus): Promise<MedicalProcedure[]> {
   try {
+    console.log(`getProceduresByStatus: Looking for procedures with status ${status}`);
+    
+    // Ensure the user is authenticated
+    const user = auth.currentUser;
+    if (!user) {
+      throw new Error("User not authenticated");
+    }
+    
+    // Create query based on status + current user
     const proceduresQuery = query(
       collection(db, "procedures"),
       where("status", "==", status),
+      where("postedBy", "==", user.uid),
       orderBy("createdAt", "desc")
     );
     
+    console.log(`Executing firestore query for status: ${status}`);
+    
     const querySnapshot = await getDocs(proceduresQuery);
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MedicalProcedure));
+    console.log(`Found ${querySnapshot.docs.length} procedures with status ${status}`);
+    
+    const procedures = querySnapshot.docs.map(doc => {
+      const procedure = convertFirestoreDocToMedicalProcedure(doc);
+      return procedure;
+    });
+    
+    return procedures;
   } catch (error) {
-    console.error("Error getting procedures:", error);
+    console.error(`Error getting procedures with status ${status}:`, error);
     throw error;
   }
 }
@@ -185,11 +241,15 @@ export async function getProceduresByStatus(status: JobStatus): Promise<MedicalP
 // Get procedures posted by the current clinic
 export async function getClinicProcedures(): Promise<MedicalProcedure[]> {
   try {
+    console.log('getClinicProcedures: Fetching all procedures for current user');
+    
     const user = auth.currentUser;
     if (!user) {
       throw new Error("User is not authenticated");
     }
 
+    console.log(`Querying procedures for user: ${user.uid}`);
+    
     const proceduresQuery = query(
       collection(db, "procedures"),
       where("postedBy", "==", user.uid),
@@ -197,10 +257,18 @@ export async function getClinicProcedures(): Promise<MedicalProcedure[]> {
     );
     
     const snapshot = await getDocs(proceduresQuery);
-    return snapshot.docs.map(doc => ({
-      ...doc.data(),
-      id: doc.id
-    })) as MedicalProcedure[];
+    console.log(`Retrieved ${snapshot.docs.length} total procedures`);
+    
+    // Log the first document for debugging
+    if (snapshot.docs.length > 0) {
+      const firstDoc = snapshot.docs[0];
+      console.log("Sample document data:", JSON.stringify({
+        id: firstDoc.id,
+        ...firstDoc.data()
+      }, null, 2).substring(0, 200) + "...");
+    }
+    
+    return snapshot.docs.map(doc => convertFirestoreDocToMedicalProcedure(doc));
   } catch (error) {
     console.error("Error fetching clinic procedures:", error);
     throw error;
@@ -240,16 +308,16 @@ export async function getAnaesthetistVisibleProcedures(): Promise<MedicalProcedu
     const proceduresMap = new Map();
     
     specificSnapshot.docs.forEach(doc => {
-      proceduresMap.set(doc.id, { id: doc.id, ...doc.data() });
+      proceduresMap.set(doc.id, convertFirestoreDocToMedicalProcedure(doc));
     });
     
     allSnapshot.docs.forEach(doc => {
       if (!proceduresMap.has(doc.id)) {
-        proceduresMap.set(doc.id, { id: doc.id, ...doc.data() });
+        proceduresMap.set(doc.id, convertFirestoreDocToMedicalProcedure(doc));
       }
     });
     
-    return Array.from(proceduresMap.values()) as MedicalProcedure[];
+    return Array.from(proceduresMap.values());
   } catch (error) {
     console.error("Error getting visible procedures:", error);
     throw error;

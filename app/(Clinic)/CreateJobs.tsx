@@ -12,20 +12,21 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
-  Animated,
 } from "react-native"
-import { Users, ChevronRight, CheckCircle } from "react-native-feather"
+import { Users, ChevronRight } from "react-native-feather"
 import { router } from "expo-router"
 import AnaesthetistCard from "../../components/Clinic/AnaesthetistCard"
-import { MedicalProcedure, VisibilityMode, UserData } from "../../data/mockData"
+import { MedicalProcedure, VisibilityMode, UserData, JobFormData } from "../../data/DataTypes"
 import { db, auth } from "../../FirebaseConfig"
 import { collection, query, where, getDocs } from "firebase/firestore"
 import { createProcedure } from "../../data/ProceduresService"
 import DatePicker from '../../components/Clinic/CreateJobs/DatePicker';
 import TimePicker from '../../components/Clinic/CreateJobs/TimePicker';
 
+import { clearCache } from "../../data/DataService";
+
 export default function CreateJobScreen() {
-  const [jobData, setJobData] = useState<Partial<MedicalProcedure>>({
+  const [jobData, setJobData] = useState<JobFormData>({
     surgeryName: "",
     surgeonName: "",
     date: new Date().toISOString(),
@@ -38,12 +39,12 @@ export default function CreateJobScreen() {
     location: "",
     fee: 0,
     remarks: "",
-    visibilityMode: "all" as VisibilityMode,
-    preferredAnaesthetists: [] as string[],
+    visibilityMode: "all",
+    preferredAnaesthetists: [],
     autoAccept: false,
     timeDelayDays: 2,
     sequentialOfferDuration: 24,
-  })
+  });
 
   const [loading, setLoading] = useState(false)
   const [anaesthetists, setAnaesthetists] = useState<UserData[]>([])
@@ -51,10 +52,8 @@ export default function CreateJobScreen() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [showSuccessNotification, setShowSuccessNotification] = useState(false);
   const [notificationMessage, setNotificationMessage] = useState("");
+  const [notificationType, setNotificationType] = useState<'success' | 'error' | 'info'>('success');
   const [showPreferredAnaesthetists, setShowPreferredAnaesthetists] = useState(false);
-
-  const [notificationOpacity] = useState(new Animated.Value(0));
-  const [notificationOffset] = useState(new Animated.Value(-50));
 
   useEffect(() => {
     fetchAnaesthetists()
@@ -232,47 +231,23 @@ export default function CreateJobScreen() {
     return isFormValid;
   };
 
-  const showNotificationWithAnimation = (message: string) => {
-    // Reset animation values
-    notificationOpacity.setValue(0);
-    notificationOffset.setValue(-50);
-    
-    // Update message and show notification
-    setNotificationMessage(message);
-    setShowSuccessNotification(true);
-    
-    // Animate in
-    Animated.stagger(100, [
-      Animated.spring(notificationOffset, {
-        toValue: 0,
-        tension: 80,
-        friction: 9,
-        useNativeDriver: true
-      }),
-      Animated.timing(notificationOpacity, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true
-      })
-    ]).start();
-    
-    // Animate out after delay
+  const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    console.log("Showing notification:", message, type);
+    setShowSuccessNotification(false);
     setTimeout(() => {
-      Animated.parallel([
-        Animated.timing(notificationOpacity, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true
-        }),
-        Animated.timing(notificationOffset, {
-          toValue: -50,
-          duration: 250,
-          useNativeDriver: true
-        })
-      ]).start(() => {
-        setShowSuccessNotification(false);
-      });
-    }, 3000);
+      setNotificationMessage(message);
+      setNotificationType(type);
+      setShowSuccessNotification(true);
+    }, 100);
+  };
+
+  const handleNotificationHide = () => {
+    setShowSuccessNotification(false);
+    if (notificationType === 'success') {
+      setTimeout(() => {
+        router.push("/(Clinic)/ClinicDashboard");
+      }, 300);
+    }
   };
 
   const handleSubmit = async () => {
@@ -303,32 +278,40 @@ export default function CreateJobScreen() {
         timeDelayDays: typeof cleanData.timeDelayDays === 'string'
           ? parseInt(cleanData.timeDelayDays)
           : (cleanData.timeDelayDays || 2),
+        acceptedBy: [], 
+        status: 'available',
+        sequentialOfferIndex: 0,
       };
       
+      const requiredFields = enhancedJobData as Required<Pick<MedicalProcedure, 'surgeryName' | 'date' | 'startTime'>> & Partial<MedicalProcedure>;
+
       if (enhancedJobData.visibilityMode === "sequential") {
         const deadline = new Date();
         const hours = enhancedJobData.sequentialOfferDuration || 24;
         deadline.setHours(deadline.getHours() + hours);
-        enhancedJobData.sequentialOfferDeadline = deadline.toISOString();
+        requiredFields.sequentialOfferDeadline = deadline.toISOString();
       }
-      
+
       if (enhancedJobData.visibilityMode === "timed") {
         const visibleDate = new Date();
         const days = enhancedJobData.timeDelayDays || 2;
         visibleDate.setDate(visibleDate.getDate() + days);
-        enhancedJobData.visibleToAllAfter = visibleDate.toISOString();
+        requiredFields.visibleToAllAfter = visibleDate.toISOString();
       }
-      
-      console.log("SUBMIT: Prepared job data:", JSON.stringify(enhancedJobData, null, 2));
-      
+
+      console.log("SUBMIT: Prepared job data:", JSON.stringify(requiredFields, null, 2));
+
       try {
         console.log("SUBMIT: Calling createProcedure...");
-        const newProcedureId = await createProcedure(enhancedJobData);
+        const newProcedureId = await createProcedure(requiredFields);
         
         console.log("SUBMIT: Success! Created procedure ID:", newProcedureId);
         
-        showNotificationWithAnimation("Job created successfully!");
+        clearCache();
+        
         resetForm();
+        
+        showNotification("Job created successfully!", 'success');
         
       } catch (createError) {
         console.error("SUBMIT: Create procedure error:", createError);
@@ -338,7 +321,7 @@ export default function CreateJobScreen() {
           errorMessage += `: ${createError.message}`;
         }
         
-        Alert.alert("Error", errorMessage);
+        showNotification(errorMessage, 'error');
       }
     } catch (error) {
       console.error("SUBMIT: General error:", error);
@@ -369,28 +352,16 @@ export default function CreateJobScreen() {
       sequentialOfferDuration: 24,
     });
     
+    setNotificationMessage("");
     setShowSuccessNotification(false);
     setFieldErrors({});
+    router.push("/(Clinic)/ClinicDashboard");
+    //INSERT NOTIF THING HERE
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      {showSuccessNotification && (
-        <Animated.View 
-          style={[
-            styles.successNotification,
-            {
-              opacity: notificationOpacity,
-              transform: [{ translateY: notificationOffset }]
-            }
-          ]}
-        >
-          <View style={styles.successNotificationContent}>
-            <CheckCircle width={20} height={20} stroke="#FFFFFF" />
-            <Text style={styles.successNotificationText}>{notificationMessage}</Text>
-          </View>
-        </Animated.View>
-      )}
+  <SafeAreaView style={styles.container}>
+    
       
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -432,7 +403,7 @@ export default function CreateJobScreen() {
             <DatePicker
               label="Date"
               value={jobData.date ?? ''}
-              onChange={(dateStr, dateObj) => handleInputChange("date", dateStr)}
+              onChange={(dateStr, _dateObj) => handleInputChange("date", dateStr)}
               error={fieldErrors.date}
               testID="field-date"
             />
@@ -440,7 +411,7 @@ export default function CreateJobScreen() {
             <TimePicker
               label="Start Time"
               value={jobData.startTime ?? ''}
-              onChange={(timeStr, timeObj) => handleInputChange("startTime", timeStr)}
+              onChange={(timeStr, _timeObj) => handleInputChange("startTime", timeStr)}
               error={fieldErrors.startTime}
               testID="field-startTime"
             />
@@ -823,36 +794,6 @@ const styles = StyleSheet.create({
     color: "#EF4444",
     fontSize: 12,
     marginTop: 4,
-  },
-  successNotification: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 50 : 20,
-    left: 16,
-    right: 16,
-    backgroundColor: '#10B981',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    zIndex: 100,
-    borderRadius: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 5,
-    elevation: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  successNotificationContent: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  successNotificationText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 15,
-    marginLeft: 8,
   },
 })
 
