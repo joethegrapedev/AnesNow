@@ -393,7 +393,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
   },
   header: {
-    backgroundColor: '#4F46E5',
+    backgroundColor: '#0891b2',
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 24,
@@ -405,7 +405,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   headerSubtitle: {
-    color: '#C7D2FE',
+    color: '#FFFFFF',
     fontSize: 14,
   },
   headerTitle: {
@@ -414,7 +414,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   dateText: {
-    color: '#A5B4FC',
+    color: '#FFFFFF',
   },
   statsScrollView: {
     marginBottom: 8,

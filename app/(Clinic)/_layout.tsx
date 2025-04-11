@@ -41,9 +41,9 @@ export default function ClinicLayout() {
           }}
         />
         <Tabs.Screen
-          name="Profile" // Case matters! Must match file name
+          name="ClinicProfile" // Case matters! Must match file name
           options={{
-            title: "Profile", // This is the displayed text
+            title: "ClinicProfile", // This is the displayed text
             tabBarIcon: ({ color }) => <User width={22} height={22} stroke={color} />,
           }}
         />
